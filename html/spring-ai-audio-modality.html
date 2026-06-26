@@ -1,0 +1,153 @@
+<blockquote>
+<p>This blog post is co-authored by our great contributor <a href="https://www.linkedin.com/in/vitalethomas/">Thomas Vitale</a>.</p>
+</blockquote>
+<p>OpenAI provides specialized models for <code>speech-to-text</code> and <code>text-to-speech</code> conversion, recognized for their performance and cost-efficiency. Spring AI integrates these capabilities via <a href="https://docs.spring.io/spring-ai/reference/api/audio/transcriptions/openai-transcriptions.html">Voice-to-Text</a> and <a href="https://docs.spring.io/spring-ai/reference/api/audio/speech/openai-speech.html">Text-to-Speech (TTS)</a>.</p>
+<iframe width="560" height="315" src="https://www.youtube.com/embed/t70PITMzrxU?si=u5sINSyETHfmILdJ" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+<p>The new <a href="https://platform.openai.com/docs/guides/audio">Audio Generation</a> feature (<code>gpt-4o-audio-preview</code>) goes further, enabling mixed input and output modalities. Audio inputs can contain richer data than text alone. Audio can convey nuanced information like tone and inflection, and together with the audio outputs it enables asynchronous <code>speech-to-speech</code> interactions.
+Additionally, this new multimodality opens up possibilities for innovative applications, such as structured data extraction. Developers can extract structured information not just from simple text, but also from images and audio, building complex, structured objects seamlessly.</p>
+<h2 id="spring-ai-audio-integrations" style="position:relative;"><a href="#spring-ai-audio-integrations" aria-label="spring ai audio integrations permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Spring AI Audio Integrations</h2>
+<p>The Spring AI <a href="https://docs.spring.io/spring-ai/reference/api/multimodality.html">Multimodality Message API</a> simplifies the integration of multimodal capabilities with various AI models.</p>
+<img src="https://docs.spring.io/spring-ai/reference/_images/spring-ai-message-api.jpg" width="600" align="center">
+<p>Now it fully supports OpenAI’s <a href="https://docs.spring.io/spring-ai/reference/api/chat/openai-chat.html#_audio">Audio Input</a> and <a href="https://docs.spring.io/spring-ai/reference/api/chat/openai-chat.html#_output_audio">Audio Output</a> modalities, thanks in large part to community member <a href="https://www.linkedin.com/in/vitalethomas/">Thomas Vitale</a>, who contributed to this feature's development.</p>
+<h3 id="setup" style="position:relative;"><a href="#setup" aria-label="setup permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Setup</h3>
+<p>Follow the <a href="https://docs.spring.io/spring-ai/reference/api/chat/openai-chat.html">Spring AI-OpenAI</a> integration documentation to prepare your environment.</p>
+<h3 id="audio-input" style="position:relative;"><a href="#audio-input" aria-label="audio input permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Audio Input</h3>
+<p>OpenAI’s <a href="https://platform.openai.com/docs/api-reference/chat/create#chat-create-messages">User Message API</a> accepts base64-encoded audio files within messages using the <a href="https://github.com/spring-projects/spring-ai/blob/main/spring-ai-core/src/main/java/org/springframework/ai/chat/messages/Media.java">Media</a> type. Supported formats include <code>audio/mp3</code> and <code>audio/wav</code>.</p>
+<p><strong>Example: Adding audio to an input prompt:</strong></p>
+<pre><code class="language-java">// Prepare the audio resource
+var audioResource = new ClassPathResource("speech1.mp3");
+
+// Create a user message with audio and send it to the chat model
+String response = chatClient.prompt()
+        .user(u -> u.text("What is this recording about?")
+                    .media(MimeTypeUtils.parseMimeType("audio/mp3"), audioResource))                    
+        .options(OpenAiChatOptions.builder()
+            .withModel(OpenAiApi.ChatModel.GPT_4_O_AUDIO_PREVIEW).build())
+        .call()
+        .content();
+</code></pre>
+<h3 id="audio-output-generation" style="position:relative;"><a href="#audio-output-generation" aria-label="audio output generation permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Audio Output Generation</h3>
+<p>The OpenAI <a href="https://platform.openai.com/docs/api-reference/chat/create#chat-create-messages">Assistant Message API</a> can return base64-encoded audio files using the <code>Media</code> type.</p>
+<p><strong>Example: Generating audio output:</strong></p>
+<pre><code class="language-java">// Generate an audio response
+ChatResponse response = chatClient
+    .prompt("Tell me a joke about the Spring Framework")
+    .options(OpenAiChatOptions.builder()
+        .withModel(OpenAiApi.ChatModel.GPT_4_O_AUDIO_PREVIEW)
+        .withOutputModalities(List.of("text", "audio"))
+        .withOutputAudio(new AudioParameters(Voice.ALLOY, AudioResponseFormat.WAV))
+        .build())
+    .call()
+    .chatResponse();
+
+// Access the audio transcript
+String audioTranscript = response.getResult().getOutput().getContent();
+
+// Retrieve the generated audio
+byte[] generatedAudio = response.getResult().getOutput().getMedia().get(0).getDataAsByteArray();
+</code></pre>
+<p>To generate audio output, specify the audio modality in <code>OpenAiChatOptions</code>. Use the <code>AudioParameters</code> class to customize the voice and the audio format.</p>
+<h2 id="voice-chatbot-demo" style="position:relative;"><a href="#voice-chatbot-demo" aria-label="voice chatbot demo permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a><a href="https://github.com/tzolov/voice-assistant-chatbot">Voice ChatBot Demo</a></h2>
+<p>This example demonstrates building an interactive chatbot using Spring AI that supports input and output audio. It shows how AI can enhance user interaction with natural-sounding audio responses.</p>
+<h3 id="setup-1" style="position:relative;"><a href="#setup-1" aria-label="setup 1 permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Setup</h3>
+<p>Add the Spring AI OpenAI starter:</p>
+<pre><code class="language-xml">&#x3C;dependency>
+    &#x3C;groupId>org.springframework.ai&#x3C;/groupId>
+    &#x3C;artifactId>spring-ai-openai-spring-boot-starter&#x3C;/artifactId>
+&#x3C;/dependency>
+</code></pre>
+<p>Configure the API key, model name, and output audio modality in <code>application.properties</code>:</p>
+<pre><code>spring.main.web-application-type=none
+
+spring.ai.openai.api-key=${OPENAI_API_KEY}
+spring.ai.openai.chat.options.model=gpt-4o-audio-preview
+
+spring.ai.openai.chat.options.output-modalities=text,audio
+spring.ai.openai.chat.options.output-audio.voice=ALLOY
+spring.ai.openai.chat.options.output-audio.format=WAV
+</code></pre>
+<h3 id="implementation" style="position:relative;"><a href="#implementation" aria-label="implementation permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Implementation</h3>
+<p>The Java implementation of the voice chatbot, detailed below, creates a conversational AI assistant using audio input and output. It leverages Spring AI's integration with OpenAI models to enable seamless interactions with users.</p>
+<p><strong>VoiceAssistantApplication</strong></p>
+<ul>
+<li>
+<p><code>VoiceAssistantApplication</code> serves as the main application.</p>
+</li>
+<li>
+<p>The <code>CommandLineRunner</code> bean initializes the chatbot:</p>
+<ul>
+<li>The <code>ChatClient</code> is configured using the <code>systemPrompt</code> for contextual understanding and an in-memory chat memory for conversation history.</li>
+<li>The <code>Audio</code> utility is used to record voice input from the user and play back audio responses generated by the AI.</li>
+</ul>
+</li>
+<li>
+<p><strong>Chat Loop:</strong> Inside the loop:</p>
+<ul>
+<li><strong>Voice Recording:</strong> The <code>audio.startRecording()</code> and <code>audio.stopRecording()</code> methods handle the recording process, pausing for user input.</li>
+<li><strong>Processing AI Response:</strong> The user message is sent to the AI model via <code>chatClient.prompt()</code>. The audio data is encapsulated in the <code>Media</code> object.</li>
+<li><strong>Response Handling:</strong> The AI-generated response is retrieved as text and played back as audio using the <code>Audio.play()</code> method.</li>
+</ul>
+</li>
+</ul>
+<p>Refer to the following code snippet for the implementation:</p>
+<pre><code class="language-java">@Bean
+public CommandLineRunner chatBot(ChatClient.Builder chatClientBuilder,
+        @Value("${chatbot.prompt:classpath:/marvin.paranoid.android.txt}") Resource systemPrompt) {
+    return args -> {
+
+        var chatClient = chatClientBuilder.defaultSystem(systemPrompt)
+            .defaultAdvisors(new MessageChatMemoryAdvisor(new InMemoryChatMemory()))
+            .build();
+
+        try (Scanner scanner = new Scanner(System.in)) {
+
+            Audio audio = new Audio();
+
+            while (true) {                    
+                audio.startRecording();
+                System.out.print("Recording your question ... press &#x3C;Enter> to stop! ");
+                scanner.nextLine();
+                audio.stopRecording();
+
+                System.out.print("PROCESSING ... ");
+
+                AssistantMessage response = chatClient.prompt()
+                    .messages(new UserMessage("Please answer the questions in the audio input",
+                            new Media(MediaType.parseMediaType("audio/wav"),
+                                    new ByteArrayResource(audio.getLastRecording()))))
+                    .call()
+                    .chatResponse()
+                    .getResult()
+                    .getOutput();
+
+                System.out.println("ASSISTANT: " + response.getContent());
+                Audio.play(response.getMedia().get(0).getDataAsByteArray());
+            }
+        }
+    };
+}
+</code></pre>
+<p>The <code>Audio</code> utility, for capturing and playing back audio, is a single class leveraging the plain <code>Java Sound API</code>.</p>
+<pre><code> ▗▄▄▖▗▄▄▖ ▗▄▄▖ ▗▄▄▄▖▗▖  ▗▖ ▗▄▄▖     ▗▄▖ ▗▄▄▄▖                                    
+▐▌   ▐▌ ▐▌▐▌ ▐▌  █  ▐▛▚▖▐▌▐▌       ▐▌ ▐▌  █                                      
+ ▝▀▚▖▐▛▀▘ ▐▛▀▚▖  █  ▐▌ ▝▜▌▐▌▝▜▌    ▐▛▀▜▌  █                                      
+▗▄▄▞▘▐▌   ▐▌ ▐▌▗▄█▄▖▐▌  ▐▌▝▚▄▞▘    ▐▌ ▐▌▗▄█▄▖                                    
+▗▄▄▖  ▗▄▖ ▗▄▄▖  ▗▄▖ ▗▖  ▗▖ ▗▄▖ ▗▄▄▄▖▗▄▄▄      ▗▄▖ ▗▖  ▗▖▗▄▄▄ ▗▄▄▖  ▗▄▖ ▗▄▄▄▖▗▄▄▄ 
+▐▌ ▐▌▐▌ ▐▌▐▌ ▐▌▐▌ ▐▌▐▛▚▖▐▌▐▌ ▐▌  █  ▐▌  █    ▐▌ ▐▌▐▛▚▖▐▌▐▌  █▐▌ ▐▌▐▌ ▐▌  █  ▐▌  █
+▐▛▀▘ ▐▛▀▜▌▐▛▀▚▖▐▛▀▜▌▐▌ ▝▜▌▐▌ ▐▌  █  ▐▌  █    ▐▛▀▜▌▐▌ ▝▜▌▐▌  █▐▛▀▚▖▐▌ ▐▌  █  ▐▌  █
+▐▌   ▐▌ ▐▌▐▌ ▐▌▐▌ ▐▌▐▌  ▐▌▝▚▄▞▘▗▄█▄▖▐▙▄▄▀    ▐▌ ▐▌▐▌  ▐▌▐▙▄▄▀▐▌ ▐▌▝▚▄▞▘▗▄█▄▖▐▙▄▄▀
+
+2024-12-01T11:00:11.274+01:00  INFO 31297 --- [voice-assistant-chatbot] [           main] s.a.d.a.m.VoiceAssistantApplication      : Started VoiceAssistantApplication in 0.827 seconds (process running for 1.054)
+
+Recording your question ... press &#x3C;Enter> to stop!
+</code></pre>
+<p>The complete demo is available on GitHub: <a href="https://github.com/tzolov/voice-assistant-chatbot">voice-assistant-chatbot</a></p>
+<h2 id="important-considerations" style="position:relative;"><a href="#important-considerations" aria-label="important considerations permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Important Considerations</h2>
+<ul>
+<li><a href="https://github.com/tzolov/voice-assistant-chatbot">One hour of</a> audio input is roughly equivalent to 128k tokens.</li>
+<li>The model currently supports <code>modalities = ["text", "audio"]</code>.</li>
+<li>Future updates may offer more flexible modality controls.</li>
+</ul>
+<h2 id="conclusion" style="position:relative;"><a href="#conclusion" aria-label="conclusion permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Conclusion</h2>
+<p>The <code>gpt-4o-audio-preview</code> model unlocks new possibilities for dynamic audio interactions, enabling developers to build rich, AI-powered audio applications.</p>
+<p><em>Disclaimer: API capabilities and features may evolve. Refer to the latest OpenAI and Spring AI documentation for updates.</em></p>

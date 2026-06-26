@@ -1,0 +1,182 @@
+<img style="float: center; display: block; margin: auto;" src="https://docs.spring.io/spring-ai/reference/_images/advisors-flow.jpg" width="250" align="right">
+<p>The Spring AI <a href="https://docs.spring.io/spring-ai/reference/1.1.1/api/chatclient.html">ChatClient</a> offers a fluent API for communicating with an AI model.
+The fluent API provides methods for building the constituent parts of a prompt that gets passed to the AI model as input.</p>
+<p><a href="https://docs.spring.io/spring-ai/reference/1.1.1/api/advisors.html">Advisors</a> are a key part of the fluent API that intercept, modify, and enhance AI-driven interactions.
+The key benefits include encapsulating common Generative AI patterns, transforming data sent to and from Large Language Models (LLMs), and providing portability across various models and use cases.</p>
+<p>Advisors process <code>ChatClientRequest</code> and <code>ChatClientResponse</code> objects.
+The framework chains advisors by their <code>getOrder()</code> values (lower values execute first), with the final advisor calling the LLM.</p>
+<p>Spring AI provides built-in advisors for <a href="https://docs.spring.io/spring-ai/reference/1.1.1/api/chat-memory.html#_memory_in_chat_client">Conversation Memory</a>, <a href="https://docs.spring.io/spring-ai/reference/1.1.1/api/retrieval-augmented-generation.html#_advisors">Retrieval Augmented Generation (RAG)</a>, Logging, and Guardrails. Developers can also create custom advisors.</p>
+<p>Typical advisor structure:</p>
+<pre><code class="language-java">public class MyAdvisor implements CallAdvisor {
+    
+    // 1. Sets the advisor orders
+    public int getOrder() { return MY_ADVISOR_ORDER; } 
+
+    // 2. Sets the advisor name
+    public String getName() { return MY_ADVISOR_NAME; } 
+
+    public ChatClientResponse adviseCall(ChatClientRequest request, CallAdvisorChain chain) {
+        // 3. Pre-process the request (modify, validate, log, etc.)
+        request = preProcess(request);
+        // 4. Call the next advisor in the chain
+        ChatClientResponse response = chain.nextCall(request);
+        // 5. Post-process the response (modify, validate, log, etc.)
+        return postProcess(response);
+    }
+}
+</code></pre>
+<h2 id="recursive-advisors" style="position:relative;"><a href="#recursive-advisors" aria-label="recursive advisors permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Recursive Advisors</h2>
+<div style="display: flex; gap: 2rem; align-items: flex-start;">
+<div style="flex: 1;">
+<p>Starting with version <code>1.1.0-M4</code>, Spring AI introduces <a href="https://docs.spring.io/spring-ai/reference/1.1.1/api/advisors-recursive.html">Recursive Advisors</a>, enabling looping through the advisor chain multiple times to support iterative workflows:</p>
+<ul>
+<li><strong>Tool calling loops</strong>: Executing multiple tools in sequence, where each tool's output informs the next decision</li>
+<li><strong>Output validation</strong>: Validating structured responses and retrying with feedback when validation fails</li>
+<li><strong>Retry logic</strong>: Refining requests based on response quality or external criteria</li>
+<li><strong>Evaluation flows</strong>: Evaluating and modifying responses before delivery</li>
+<li><strong>Agentic loops</strong>: Building autonomous agents that plan, execute, and iterate on tasks by analyzing results and determining next actions until a goal is achieved</li>
+</ul>
+<p>Traditional single-pass advisor patterns cannot adequately handle these scenarios.</p>
+<p>Recursive advisors loop through the downstream advisor chain multiple times, repeatedly calling the LLM until a condition is met.</p>
+<p>The <code>CallAdvisorChain.copy(CallAdvisor after)</code> method creates a sub-chain containing only downstream advisors, enabling controlled iteration while maintaining proper ordering and observability, and preventing re-execution of upstream advisors.</p>
+</div>
+<div style="flex: 0.95;">
+<img style="float: center; display: block; margin: auto;" src="https://raw.githubusercontent.com/spring-io/spring-io-static/refs/heads/main/blog/tzolov/20251031/spring-ai-recursive-advisors-flow.png" width="280">
+<div style="font-size: 0.8em;">
+<p><em>The diagram illustrates how recursive advisors enable iterative processing by allowing the flow to loop back through the advisor chain multiple times. Unlike traditional single-pass execution, recursive advisors can revisit previous advisors based on response conditions, creating sophisticated iterative workflows between the client, advisors, and LLM.</em></p>
+</div>
+</div>
+</div>
+<p>Here's the basic pattern for implementing a recursive advisor:</p>
+<pre><code class="language-java">public class MyRecursiveAdvisor implements CallAdvisor {
+    
+    @Override
+    public ChatClientResponse adviseCall(ChatClientRequest request, CallAdvisorChain chain) {
+        
+        // Call the chain initially
+        ChatClientResponse response = chain.nextCall(request);
+        
+        // Check if we need to retry
+        while (!isConditionMet(response)) {
+            // Modify the request based on the response
+            ChatClientRequest modifiedRequest = modifyRequest(request, response);
+            
+            // Create a sub-chain and recurse
+            response = chain.copy(this).nextCall(modifiedRequest);
+        }
+        
+        return response;
+    }
+}
+</code></pre>
+<p>The key difference from non-recursive advisors is using <code>chain.copy(this).nextCall(...)</code> instead of <code>chain.nextCall(...)</code> to iterate on a copy of the inner chain.
+This ensures each iteration goes through the complete downstream chain, allowing other advisors to observe and intercept while maintaining proper observability.</p>
+<blockquote>
+<h4 id="️-important-note" style="position:relative;"><a href="#%EF%B8%8F-important-note" aria-label="️ important note permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>⚠️ Important Note</h4>
+<p><strong>Recursive Advisors are a new experimental feature in Spring AI 1.1.0-M4.</strong> They are non-streaming only, requires careful advisor ordering, can increase costs due to multiple LLM calls.</p>
+<p>Be especially careful with inner advisors that maintain external state - they may require extra attention to maintain correctness across iterations.</p>
+<p>Always set termination conditions and retry limits to prevent infinite loops.</p>
+<p>Consider whether your use case benefits more from recursive advisors or from implementing an explicit while loop around ChatClient calls in your application code.</p>
+</blockquote>
+<h2 id="built-in-recursive-advisors" style="position:relative;"><a href="#built-in-recursive-advisors" aria-label="built in recursive advisors permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Built-in Recursive Advisors</h2>
+<p>Spring AI 1.1.0-M4 provides two recursive advisors:</p>
+<h3 id="toolcalladvisor" style="position:relative;"><a href="#toolcalladvisor" aria-label="toolcalladvisor permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a><a href="https://docs.spring.io/spring-ai/reference/1.1.1/api/advisors-recursive.html#_toolcalladvisor">ToolCallAdvisor</a></h3>
+<div style="display: flex; gap: 2rem; align-items: flex-start;">
+<div style="flex: 0.9;">
+<p><strong>Default ToolCalling support</strong></p>
+<p>By default, the <a href="https://docs.spring.io/spring-ai/reference/1.1.1/api/tools.html#_framework_controlled_tool_execution">Spring AI Tool Execution</a> is implemented inside each <code>ChatModel</code> implementation using a <code>ToolCallingManager</code>.
+This means that the tool calling requests and response flow is opaque for the ChatClient Advisors as it happens outside the advisor execution chain.</p>
+<img style="float: center; display: block; margin: auto;" src="https://raw.githubusercontent.com/spring-io/spring-io-static/refs/heads/main/blog/tzolov/20251031/spring-ai-in-chatmodel-toolcalling.png" width="400">
+</div>
+<div style="flex: 1;">
+<p><strong>ToolCallAdvisor</strong></p>
+<p>Leveraging the <a href="https://docs.spring.io/spring-ai/reference/1.1.1/api/tools.html#_user_controlled_tool_execution">User-Controlled tool execution</a>, the <code>ToolCallAdvisor</code> implements the tool calling loop within the advisor chain, providing explicit control over tool execution rather than delegating to the model's internal tool execution</p>
+<img style="float: center; display: block; margin: auto;" src="https://raw.githubusercontent.com/spring-io/spring-io-static/refs/heads/main/blog/tzolov/20251031/spring-ai-advisor-toolcalling.png" width="450">
+<ul>
+<li>Loops until no more tool calls are present</li>
+<li>Enables other advisors (such as Advisor ABC) to intercept and alter each tool call request and response</li>
+<li>Supports "return direct" functionality</li>
+<li>Disables the chat-model's internal tool execution</li>
+</ul>
+</div>
+</div>
+<p><strong>Example Usage:</strong></p>
+<pre><code class="language-java">var toolCallAdvisor = ToolCallAdvisor.builder()
+    .toolCallingManager(toolCallingManager)
+    .advisorOrder(BaseAdvisor.HIGHEST_PRECEDENCE + 300)
+    .build();
+        
+public record Request(String location) {}
+
+var weatherTool = FunctionToolCallback.builder("getWeather", (Request request) -> "15.0°C")
+        .description("Gets the weather for a location")
+        .inputType(Request.class)
+        .build();
+
+var chatClient = ChatClient.builder(chatModel)
+    .defaultToolCallbacks(weatherTool) // Tools registration
+    .defaultAdvisors(toolCallAdvisor) // Tool Call Execution as Advisor
+    .build();
+
+String response = chatClient.prompt()
+    .user("What's the weather in Paris and Amsterdam and convert the temperature to Fahrenheit?")
+    .call()
+    .content();
+</code></pre>
+<p><strong>Note</strong>: By default, the ToolCallAdvisor's order is set close to <code>Ordered.HIGHEST_PRECEDENCE</code> to ensure the advisor executes first in the chain (first for request processing, last for response processing), allowing inner advisors to intercept and process tool request and response messages.</p>
+<p>When a tool execution has <code>returnDirect=true</code>, the advisor executes the tool, detects the flag, breaks the loop, and returns the output directly to the client without sending it to the LLM. This reduces latency when the tool's output is the final answer.</p>
+<blockquote>
+<p><strong>💡 Demo Project</strong>: See a complete working example of the ToolCallAdvisor in the <a href="https://github.com/spring-projects/spring-ai-examples/tree/main/advisors/recursive-advisor-demo">Recursive Advisor Demo</a> project.</p>
+</blockquote>
+<h3 id="structuredoutputvalidationadvisor" style="position:relative;"><a href="#structuredoutputvalidationadvisor" aria-label="structuredoutputvalidationadvisor permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a><a href="https://docs.spring.io/spring-ai/reference/1.1.1/api/advisors-recursive.html#_structuredoutputvalidationadvisor">StructuredOutputValidationAdvisor</a></h3>
+<p>The <code>StructuredOutputValidationAdvisor</code> validates structured JSON output against a generated schema and retries if validation fails:</p>
+<ul>
+<li>Automatically generates JSON schemas from expected output types</li>
+<li>Validates LLM responses againsts the schema and retries with validation error messages</li>
+<li>Configurable maximum retry attempts</li>
+<li>Supports custom <code>ObjectMapper</code> for JSON processing</li>
+</ul>
+<p><strong>Example Usage:</strong></p>
+<pre><code class="language-java">public record ActorFilms(String actor, List&#x3C;String> movies) {}
+
+var validationAdvisor = StructuredOutputValidationAdvisor.builder()
+    .outputType(ActorFilms.class)
+    .maxRepeatAttempts(3)
+    .build();
+
+var chatClient = ChatClient.builder(chatModel)
+    .defaultAdvisors(validationAdvisor)
+    .build();
+
+ActorFilms actorFilms = chatClient.prompt()
+    .user("Generate the filmography for Tom Hanks")
+    .call()
+    .entity(ActorFilms.class);
+</code></pre>
+<p>When validation fails, the advisor augments the prompt with error details and retries up to the configured maximum attempts.</p>
+<p><strong>Note</strong>: By default, the StructuredOutputValidationAdvisor's <a href="https://docs.spring.io/spring-ai/reference/api/advisors.html#_advisor_order">order</a> is set close to <code>Ordered.LOWEST_PRECEDENCE</code> to ensure the advisor executes toward the end of the chain (but before the model call), meaning it's last for request processing and first for response processing.</p>
+<h2 id="best-practices" style="position:relative;"><a href="#best-practices" aria-label="best practices permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Best Practices</h2>
+<ul>
+<li><strong>Set Clear Termination Conditions</strong>: Ensure loops have definite exit conditions to prevent infinite loops</li>
+<li><strong>Use Appropriate Ordering</strong>: Place recursive advisors early in the chain to allow other advisors to observe iterations, or late to prevent observation</li>
+<li><strong>Provide Feedback</strong>: Augment retry requests with information about why the retry is needed to help the LLM improve</li>
+<li><strong>Limit Iterations</strong>: Set maximum attempt limits to prevent runaway execution</li>
+<li><strong>Monitor Execution</strong>: Use Spring AI's observability features to track iteration counts and performance</li>
+<li><strong>Choose the Right Approach</strong>: Evaluate whether recursive advisors or explicit while loops around ChatClient calls better suit your specific use case and architecture</li>
+</ul>
+<h3 id="performance-considerations" style="position:relative;"><a href="#performance-considerations" aria-label="performance considerations permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Performance Considerations</h3>
+<p>Recursive advisors increase the number of LLM calls, affecting:</p>
+<ul>
+<li><strong>Cost</strong>: More API calls increase costs</li>
+<li><strong>Latency</strong>: Multiple iterations add processing time</li>
+<li><strong>Token Usage</strong>: Each iteration consumes additional tokens</li>
+</ul>
+<p>To optimize set reasonable retry limits and monitor iteration counts.
+Cache intermediate results when possible</p>
+<h2 id="resources" style="position:relative;"><a href="#resources" aria-label="resources permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Resources</h2>
+<ul>
+<li><a href="https://docs.spring.io/spring-ai/reference/api/advisors-recursive.html">Recursive Advisors Documentation</a></li>
+<li><a href="https://docs.spring.io/spring-ai/reference/api/advisors.html">Advisors API Guide</a></li>
+<li><a href="https://docs.spring.io/spring-ai/reference/api/chatclient.html">ChatClient API Documentation</a></li>
+<li><a href="https://github.com/spring-projects/spring-ai">Spring AI GitHub Repository</a></li>
+</ul>

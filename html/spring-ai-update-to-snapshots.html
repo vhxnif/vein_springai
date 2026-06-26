@@ -1,0 +1,119 @@
+<h1 id="using-spring-ai-100-snapshot-important-changes-and-updates" style="position:relative;"><a href="#using-spring-ai-100-snapshot-important-changes-and-updates" aria-label="using spring ai 100 snapshot important changes and updates permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Using Spring AI 1.0.0-SNAPSHOT: Important Changes and Updates</h1>
+<p>Spring AI 1.0.0-SNAPSHOT introduces several important changes to artifact IDs, dependency management, and autoconfiguration. This blog post outlines these changes and provides guidance on how to update your projects.</p>
+<p>The most significant change is the naming pattern for Spring AI starter artifacts:</p>
+<ul>
+<li>Model starters: <code>spring-ai-{model}-spring-boot-starter</code> → <code>spring-ai-starter-model-{model}</code></li>
+<li>Vector Store starters: <code>spring-ai-{store}-store-spring-boot-starter</code> → <code>spring-ai-starter-vector-store-{store}</code></li>
+<li>MCP starters: <code>spring-ai-mcp-{type}-spring-boot-starter</code> → <code>spring-ai-starter-mcp-{type}</code></li>
+</ul>
+<p>Additionally, you'll need to add snapshot repositories and update your dependency management configuration.</p>
+<p>There are two ways to update your projects to Spring AI 1.0.0-SNAPSHOT: <a href="#automatic-updates-using-claude-code">automatic updates using AI tools</a> or <a href="#manual-updates">manual updates</a>. The automatic approach leverages Claude Code to quickly transform your projects, while the manual approach provides step-by-step instructions for those who prefer to make changes directly.</p>
+<h2 id="automatic-updates-using-claude-code" style="position:relative;"><a href="#automatic-updates-using-claude-code" aria-label="automatic updates using claude code permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Automatic Updates Using Claude Code</h2>
+<p>For those who prefer an automated approach, you can use the <a href="https://docs.anthropic.com/en/docs/agents-and-tools/claude-code/overview">Claude Code CLI tool</a> with a provided prompt to automatically upgrade your projects to 1.0.0-SNAPSHOT. This approach can save time and reduce errors when upgrading multiple projects or complex codebases.
+For more details, see the <a href="https://docs.spring.io/spring-ai/reference/upgrade-notes.html#automating-upgrading-using-ai">Automating upgrading using AI</a> section in the Upgrade Notes.</p>
+<p>Here we will just show the steps that the Claude Code CLI tool will perform in the form of screen snapshots.</p>
+<p>Pasting in the prompt.</p>
+<p><img src="https://raw.githubusercontent.com/spring-io/spring-io-static/main/blog/mpollack/claude-paste-prompt.png" alt="Pasting a prompt in Claude"></p>
+<p>Updating BOM version.</p>
+<p><img src="https://raw.githubusercontent.com/spring-io/spring-io-static/main/blog/mpollack/claude-update-bom-version.png" alt="Updating BOM version in Claude"></p>
+<p>Adding a repository.</p>
+<p><img src="https://raw.githubusercontent.com/spring-io/spring-io-static/main/blog/mpollack/claude-add-repository.png" alt="Adding a repository in Claude"></p>
+<p>Updating a starter.</p>
+<p><img src="https://raw.githubusercontent.com/spring-io/spring-io-static/main/blog/mpollack/claude-update-starter.png" alt="Updating a starter in Claude"></p>
+<p>All done!</p>
+<p><img src="https://raw.githubusercontent.com/spring-io/spring-io-static/main/blog/mpollack/claude-done.png" alt="Task completion in Claude"></p>
+<h2 id="manual-updates" style="position:relative;"><a href="#manual-updates" aria-label="manual updates permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Manual Updates</h2>
+<h3 id="adding-snapshot-repositories" style="position:relative;"><a href="#adding-snapshot-repositories" aria-label="adding snapshot repositories permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Adding Snapshot Repositories</h3>
+<p>To use the 1.0.0-SNAPSHOT version, you need to add the snapshot repositories to your build file. The dependency on the Central Sonatype Snapshots repository (<code>https://central.sonatype.com/repository/maven-snapshots/</code>) is specifically needed to pick up snapshot dependencies of the MCP Java SDK.</p>
+<h3 id="maven" style="position:relative;"><a href="#maven" aria-label="maven permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Maven</h3>
+<pre><code class="language-xml">&#x3C;repositories>
+  &#x3C;repository>
+    &#x3C;id>spring-snapshots&#x3C;/id>
+    &#x3C;name>Spring Snapshots&#x3C;/name>
+    &#x3C;url>https://repo.spring.io/snapshot&#x3C;/url>
+    &#x3C;releases>
+      &#x3C;enabled>false&#x3C;/enabled>
+    &#x3C;/releases>
+  &#x3C;/repository>
+  &#x3C;repository>
+    &#x3C;name>Central Portal Snapshots&#x3C;/name>
+    &#x3C;id>central-portal-snapshots&#x3C;/id>
+    &#x3C;url>https://central.sonatype.com/repository/maven-snapshots/&#x3C;/url>
+    &#x3C;releases>
+      &#x3C;enabled>false&#x3C;/enabled>
+    &#x3C;/releases>
+    &#x3C;snapshots>
+      &#x3C;enabled>true&#x3C;/enabled>
+    &#x3C;/snapshots>
+  &#x3C;/repository>
+&#x3C;/repositories>
+</code></pre>
+<h3 id="gradle" style="position:relative;"><a href="#gradle" aria-label="gradle permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Gradle</h3>
+<pre><code class="language-groovy">repositories {
+  mavenCentral()
+  maven { url 'https://repo.spring.io/snapshot' }
+  maven {
+    name = 'Central Portal Snapshots'
+    url = 'https://central.sonatype.com/repository/maven-snapshots/'
+  }  
+}
+</code></pre>
+<h3 id="updating-dependency-management" style="position:relative;"><a href="#updating-dependency-management" aria-label="updating dependency management permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Updating Dependency Management</h3>
+<p>Update your Spring AI BOM version to <code>1.0.0-SNAPSHOT</code> in your build configuration:</p>
+<h3 id="maven-1" style="position:relative;"><a href="#maven-1" aria-label="maven 1 permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Maven</h3>
+<pre><code class="language-xml">&#x3C;dependencyManagement>
+    &#x3C;dependencies>
+        &#x3C;dependency>
+            &#x3C;groupId>org.springframework.ai&#x3C;/groupId>
+            &#x3C;artifactId>spring-ai-bom&#x3C;/artifactId>
+            &#x3C;version>1.0.0-SNAPSHOT&#x3C;/version>
+            &#x3C;type>pom&#x3C;/type>
+            &#x3C;scope>import&#x3C;/scope>
+        &#x3C;/dependency>
+    &#x3C;/dependencies>
+&#x3C;/dependencyManagement>
+</code></pre>
+<h3 id="gradle-1" style="position:relative;"><a href="#gradle-1" aria-label="gradle 1 permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Gradle</h3>
+<pre><code class="language-groovy">dependencies {
+  implementation platform("org.springframework.ai:spring-ai-bom:1.0.0-SNAPSHOT")
+  // Add specific Spring AI dependencies here
+}
+</code></pre>
+<h3 id="changes-to-spring-ai-artifact-ids" style="position:relative;"><a href="#changes-to-spring-ai-artifact-ids" aria-label="changes to spring ai artifact ids permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Changes to Spring AI Artifact IDs</h3>
+<p>The naming pattern for Spring AI starter artifacts has changed in 1.0.0-SNAPSHOT. You'll need to update your dependencies according to the following patterns:</p>
+<ul>
+<li>Model starters: <code>spring-ai-{model}-spring-boot-starter</code> → <code>spring-ai-starter-model-{model}</code></li>
+<li>Vector Store starters: <code>spring-ai-{store}-store-spring-boot-starter</code> → <code>spring-ai-starter-vector-store-{store}</code></li>
+<li>MCP starters: <code>spring-ai-mcp-{type}-spring-boot-starter</code> → <code>spring-ai-starter-mcp-{type}</code></li>
+</ul>
+<h3 id="example" style="position:relative;"><a href="#example" aria-label="example permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Example</h3>
+<p><strong>Before:</strong></p>
+<pre><code class="language-xml">&#x3C;dependency>
+    &#x3C;groupId>org.springframework.ai&#x3C;/groupId>
+    &#x3C;artifactId>spring-ai-openai-spring-boot-starter&#x3C;/artifactId>
+&#x3C;/dependency>
+</code></pre>
+<p><strong>After:</strong></p>
+<pre><code class="language-xml">&#x3C;dependency>
+    &#x3C;groupId>org.springframework.ai&#x3C;/groupId>
+    &#x3C;artifactId>spring-ai-starter-model-openai&#x3C;/artifactId>
+&#x3C;/dependency>
+</code></pre>
+<h3 id="changes-to-spring-ai-autoconfiguration-artifacts" style="position:relative;"><a href="#changes-to-spring-ai-autoconfiguration-artifacts" aria-label="changes to spring ai autoconfiguration artifacts permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Changes to Spring AI Autoconfiguration Artifacts</h3>
+<p>The Spring AI autoconfiguration has changed from a single monolithic artifact to individual autoconfiguration artifacts per model, vector store, and other components. This change was made to minimize the impact of different versions of dependent libraries conflicting, such as Google Protocol Buffers, Google RPC, and others.</p>
+<p>By separating autoconfiguration into component-specific artifacts, you can avoid pulling in unnecessary dependencies and reduce the risk of version conflicts in your application.</p>
+<p>The original monolithic artifact is no longer available:</p>
+<pre><code class="language-xml">&#x3C;!-- NO LONGER AVAILABLE -->
+&#x3C;dependency>
+    &#x3C;groupId>org.springframework.ai&#x3C;/groupId>
+    &#x3C;artifactId>spring-ai-spring-boot-autoconfigure&#x3C;/artifactId>
+    &#x3C;version>${project.version}&#x3C;/version>
+&#x3C;/dependency>
+</code></pre>
+<p>Instead, each component now has its own autoconfiguration artifact following these patterns:</p>
+<ul>
+<li>Model autoconfiguration: <code>spring-ai-autoconfigure-model-{model}</code></li>
+<li>Vector Store autoconfiguration: <code>spring-ai-autoconfigure-vector-store-{store}</code></li>
+<li>MCP autoconfiguration: <code>spring-ai-autoconfigure-mcp-{type}</code></li>
+</ul>
+<p>In most cases, you won't need to explicitly add these autoconfiguration dependencies. They are included transitively when using the corresponding starter dependencies.</p>

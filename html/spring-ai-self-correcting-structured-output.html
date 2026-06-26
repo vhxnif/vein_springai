@@ -1,0 +1,228 @@
+<p>Large language models are text-in, text-out systems — their interface is natural language.
+<img style="display: block; margin: 1px auto; padding: 7px;" src="https://raw.githubusercontent.com/spring-io/spring-io-static/refs/heads/main/blog/tzolov/20260622/structured-output-logo.png" width="400" align="right"></p>
+<p>Natural language is a great interface for humans and a poor one for software. The moment downstream code needs to route on a field, persist a value, or branch on a result, the conversation has to become a record. <strong>Structured output</strong> bridges that gap. The model is steered to produce text conforming to a schema; the application parses it back into a typed object the rest of the codebase can treat like any other domain type.</p>
+<p>Spring AI has supported structured output since day one through <code>ChatClient.call().entity(...)</code>. Spring AI 2.0 adds two new dials to it — <strong>provider-native structured output</strong> and <strong>self-correcting schema validation</strong>. Defaults are unchanged, so existing code keeps working.</p>
+<p>This post walks through structured output, starting with a simple, working case first, then add reliability piece by piece.</p>
+<hr>
+<h2 id="typed-response" style="position:relative;"><a href="#typed-response" aria-label="typed response permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Typed Response</h2>
+<p>Define a Java record for the shape you want back:</p>
+<pre><code class="language-java">record ActorsFilms(String actor, List&#x3C;String> movies) {}
+</code></pre>
+<p>Ask <code>ChatClient</code> to populate it. Instead of finishing the call with <code>.content()</code> — which returns the raw text reply — finish with <code>.entity(...)</code> and pass your target type:</p>
+<pre><code class="language-java">ActorsFilms films = chatClient.prompt()
+    .user("Generate the filmography for a random actor.")
+    .call()
+    .entity(ActorsFilms.class);
+</code></pre>
+<p>That's it. The result is a typed <code>ActorsFilms</code> you can pass to the rest of your code:</p>
+<pre><code class="language-java">System.out.println(films.actor());     // "Tom Hanks"
+System.out.println(films.movies());    // ["Forrest Gump", "Cast Away", ...]
+</code></pre>
+<blockquote>
+<p><strong><code>.entity(...)</code> is <code>.call()</code>-only.</strong> Typed parsing requires the complete response, so it isn't available on the streaming path (<code>.stream()</code> returns text chunks, not typed objects). This applies to every variant covered below — <code>Class</code>, <code>ParameterizedTypeReference</code>, custom converter, with or without the new dials.</p>
+</blockquote>
+<p>Behind the scenes, Spring AI did three things: a <strong>schema generator</strong> turned your <code>ActorsFilms</code> record into a JSON schema, that schema was appended to the prompt's system context, and the model's JSON answer was then handed to a <strong>type converter</strong> that parsed it back into your record.</p>
+<img style="display: block; margin: 1px auto; padding: 7px;" src="https://raw.githubusercontent.com/spring-io/spring-io-static/refs/heads/main/blog/tzolov/20260622/structured-output-basic.png" width="800">
+<p>This works on every model Spring AI supports — there's nothing provider-specific about it.</p>
+<p>It also has no guarantees. The model is <em>asked</em> to produce JSON matching the schema, not <em>forced</em> to. Most of the time it complies. Sometimes it doesn't — it returns an extra field, omits a required one, or wraps the JSON in prose. When that happens, the parser throws.</p>
+<p>The next two sections fix that, one approach at a time.</p>
+<hr>
+<h2 id="adding-a-safety-net-validateschema" style="position:relative;"><a href="#adding-a-safety-net-validateschema" aria-label="adding a safety net validateschema permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Adding a Safety Net: <code>validateSchema()</code></h2>
+<p>The simplest way to handle malformed output is to detect it and retry. Spring AI 2.0 does this automatically with a single switch:</p>
+<pre><code class="language-java">ActorsFilms films = chatClient.prompt()
+    .user("Generate the filmography for a random actor.")
+    .call()
+    .entity(ActorsFilms.class, spec -> spec.validateSchema());
+</code></pre>
+<p>The <code>spec -> spec.validateSchema()</code> consumer turns on a self-correcting retry loop:</p>
+<ol>
+<li>The model responds.</li>
+<li>Spring AI validates the response against the schema for <code>ActorsFilms</code>.</li>
+<li>If validation passes, you get your typed record back.</li>
+<li>If it fails, the validation error ("missing required field <code>actor</code>", "expected <code>array</code>, got <code>string</code>") is appended to the user prompt, and the call is re-issued — up to 3 attempts by default.</li>
+</ol>
+<p>The model sees the <em>specific</em> error on each retry. The second attempt isn't a blind re-try; the model knows what was wrong and can correct it.</p>
+<img style="display: block; margin: 1px auto; padding: 7px;" src="https://raw.githubusercontent.com/spring-io/spring-io-static/refs/heads/main/blog/tzolov/20260622/structured-output-self-correction.png" width="800">
+<p>This is powered by <code>StructuredOutputValidationAdvisor</code>, a <a href="https://docs.spring.io/spring-ai/reference/api/advisors-recursive.html">recursive advisor</a> that's auto-registered when you call <code>validateSchema()</code>. You don't have to wire anything; the switch is the entire configuration.</p>
+<h5 id="customizing-the-advisor" style="position:relative;"><a href="#customizing-the-advisor" aria-label="customizing the advisor permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Customizing the advisor</h5>
+<p><code>StructuredOutputValidationAdvisor</code> defaults to <strong>3 retry attempts</strong> and uses Spring AI's default <code>JsonMapper</code>. To customize — for example, more attempts, a pre-supplied schema, or a different mapper — build your own instance and register it on the <code>ChatClient</code>. An explicitly registered advisor replaces the auto-registered one:</p>
+<pre><code class="language-java">var validationAdvisor = StructuredOutputValidationAdvisor.builder()
+    .outputType(ActorsFilms.class)
+    .maxRepeatAttempts(5)
+    .build();
+
+ChatClient chatClient = ChatClient.builder(chatModel)
+    .defaultAdvisors(validationAdvisor)
+    .build();
+</code></pre>
+<hr>
+<h2 id="adding-upstream-guarantees-useproviderstructuredoutput" style="position:relative;"><a href="#adding-upstream-guarantees-useproviderstructuredoutput" aria-label="adding upstream guarantees useproviderstructuredoutput permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Adding Upstream Guarantees: <code>useProviderStructuredOutput()</code></h2>
+<p><code>validateSchema()</code> is a <em>response-side</em> safety net — it catches bad output after the fact and retries. The complementary approach is a <em>request-side</em> constraint: tell the model's provider, at the API level, that the response must conform to a schema. Most modern providers support this (OpenAI's Structured Outputs, Anthropic's structured output extension, Gemini's <code>responseSchema</code>, Mistral's <code>response_format</code>).</p>
+<p>Spring AI exposes it portably with another switch on the same consumer:</p>
+<pre><code class="language-java">ActorsFilms films = chatClient.prompt()
+    .user("Generate the filmography for a random actor.")
+    .call()
+    .entity(ActorsFilms.class, spec -> spec.useProviderStructuredOutput());
+</code></pre>
+<p>What changes at the wire level:</p>
+<ul>
+<li>The system prompt no longer carries a JSON format instruction (cleaner, fewer tokens).</li>
+<li>The schema is sent to the provider as an API-level field.</li>
+<li>The provider's runtime enforces conformance — invalid responses can't be emitted at all.</li>
+</ul>
+<p>Supported providers as of 2.0: <strong>OpenAI</strong>, <strong>Anthropic</strong>, <strong>Google GenAI</strong> , <strong>Mistral AI</strong>, <strong>Ollama</strong> (model-specific). The same <code>.useProviderStructuredOutput()</code> call works regardless of which is wired in.</p>
+<p>Spring AI detects support by checking whether the model's chat options implement the <code>StructuredOutputChatOptions</code> interface. If not, the flag is silently ignored and the call falls back to the prompt-based default.</p>
+<h4 id="why-its-off-by-default" style="position:relative;"><a href="#why-its-off-by-default" aria-label="why its off by default permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Why it's off by default</h4>
+<p>Compatibility. Older or non-supporting models would reject the request, and the prompt-based default works everywhere. A few known limitations are worth mentioning even on supported providers:</p>
+<ul>
+<li><strong>Partial JSON Schema support.</strong> Native structured output support is often <em>partial</em> — even on providers that advertise the feature, the accepted JSON Schema surface varies. <code>$ref</code>, deeply nested arrays, <code>allOf</code>/<code>anyOf</code>/<code>oneOf</code>, regex patterns, and recursive types are common limitations. The shape drift this can cause is exactly what <code>validateSchema()</code> (next section) is good at catching.</li>
+<li><strong>Ollama with reasoning ("thinking") models</strong> — variants like <code>qwen</code> may emit their internal reasoning trace as plain text instead of JSON, causing parse errors. Use a non-reasoning model, or combine native output with <code>validateSchema()</code> so misbehaving responses are retried.</li>
+<li><strong>OpenAI doesn't accept top-level arrays</strong> in its Structured Outputs API. Wrap a list in a container record before requesting it natively (<code>record FilmographyList(List&#x3C;ActorsFilms> films) {}</code>).</li>
+</ul>
+<hr>
+<h2 id="combining-both" style="position:relative;"><a href="#combining-both" aria-label="combining both permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Combining Both</h2>
+<p>The two switches solve different problems and compose naturally:</p>
+<pre><code class="language-java">ActorsFilms films = chatClient.prompt()
+    .user("Generate the filmography for a random actor.")
+    .call()
+    .entity(ActorsFilms.class, spec -> spec
+        .useProviderStructuredOutput()
+        .validateSchema());
+</code></pre>
+<p><code>useProviderStructuredOutput()</code> minimizes the chance of malformed output by constraining the model at the API level. <code>validateSchema()</code> catches the residual cases — provider edge cases, the Ollama reasoning quirk above — and corrects them automatically.</p>
+<p>Reach for both when downstream code can't tolerate shape drift — when a missing field or wrong type would corrupt state, throw later, or silently misroute.</p>
+<hr>
+<h2 id="generic-types-lists-maps-and-beyond" style="position:relative;"><a href="#generic-types-lists-maps-and-beyond" aria-label="generic types lists maps and beyond permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Generic Types: Lists, Maps, and Beyond</h2>
+<p><code>.entity(Class)</code> is for concrete classes. For generic types — <code>List&#x3C;ActorsFilms></code>, <code>Map&#x3C;String, ActorsFilms></code> — use <code>ParameterizedTypeReference</code>:</p>
+<pre><code class="language-java">List&#x3C;ActorsFilms> films = chatClient.prompt()
+    .user("Generate filmographies for three random actors.")
+    .call()
+    .entity(new ParameterizedTypeReference&#x3C;List&#x3C;ActorsFilms>>() {});
+</code></pre>
+<p>The same <code>EntityParamSpec</code> consumer works:</p>
+<pre><code class="language-java">List&#x3C;ActorsFilms> films = chatClient.prompt()
+    .user("Generate filmographies for three random actors.")
+    .call()
+    .entity(new ParameterizedTypeReference&#x3C;List&#x3C;ActorsFilms>>() {},
+            spec -> spec.validateSchema());
+</code></pre>
+<p>One thing to watch out for: OpenAI's Structured Outputs API doesn't accept a top-level array. If you combine <code>List&#x3C;...></code> with <code>.useProviderStructuredOutput()</code> on OpenAI, the call will fail. The fix is a one-line wrapper record:</p>
+<pre><code class="language-java">record FilmographyList(List&#x3C;ActorsFilms> films) {}
+
+FilmographyList result = chatClient.prompt()
+    .user("Generate filmographies for three random actors.")
+    .call()
+    .entity(FilmographyList.class, spec -> spec.useProviderStructuredOutput());
+</code></pre>
+<p>The default prompt-based flow has no such restriction — top-level arrays work fine without <code>useProviderStructuredOutput()</code>.</p>
+<hr>
+<h2 id="getting-the-full-response" style="position:relative;"><a href="#getting-the-full-response" aria-label="getting the full response permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Getting the Full Response</h2>
+<p><code>.entity(...)</code> returns only the parsed object. If you also need the underlying <code>ChatResponse</code> — for token usage, observability metadata, or anything beyond the entity — use <code>.responseEntity(...)</code>:</p>
+<pre><code class="language-java">ResponseEntity&#x3C;ChatResponse, ActorsFilms> result = chatClient.prompt()
+    .user("Generate the filmography for a random actor.")
+    .call()
+    .responseEntity(ActorsFilms.class);
+
+ActorsFilms films = result.entity();
+ChatResponse raw = result.response();
+long totalTokens = raw.getMetadata().getUsage().getTotalTokens();
+</code></pre>
+<p>It has the same overload set as <code>.entity(...)</code> — <code>Class</code>, <code>ParameterizedTypeReference</code>, and the <code>EntityParamSpec</code> consumer all apply.</p>
+<hr>
+<h2 id="when-the-built-ins-arent-enough" style="position:relative;"><a href="#when-the-built-ins-arent-enough" aria-label="when the built ins arent enough permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>When the Built-ins Aren't Enough</h2>
+<p>The built-in <code>BeanOutputConverter</code> is strict: it expects the model's response to be parseable JSON, full stop. But models often wrap their JSON in markdown code fences:</p>
+<pre><code>Here's the filmography:
+```json
+{ "actor": "Tom Hanks", "movies": ["Forrest Gump", "Cast Away"] }
+```
+</code></pre>
+<p><code>BeanOutputConverter</code> will throw on the first <code>H</code> of "Here's". The common fix is a custom converter that strips fences and extracts the JSON before delegating to the default parser:</p>
+<pre><code class="language-java">public class LenientJsonOutputConverter&#x3C;T> implements StructuredOutputConverter&#x3C;T> {
+
+    private static final Pattern FENCE = Pattern.compile("```(?:json)?\\s*([\\s\\S]*?)```");
+
+    private final BeanOutputConverter&#x3C;T> delegate;
+
+    public LenientJsonOutputConverter(Class&#x3C;T> targetType) {
+        this.delegate = new BeanOutputConverter&#x3C;>(targetType);
+    }
+
+    @Override public String getFormat()     { return delegate.getFormat(); }
+    @Override public String getJsonSchema() { return delegate.getJsonSchema(); }
+
+    @Override
+    public T convert(String source) {
+        var matcher = FENCE.matcher(source);
+        String json = matcher.find() ? matcher.group(1).trim() : source.trim();
+        return delegate.convert(json);
+    }
+}
+</code></pre>
+<p>Pass it to <code>.entity(...)</code> instead of a <code>Class</code>:</p>
+<pre><code class="language-java">ActorsFilms films = chatClient.prompt()
+    .user("Generate the filmography for a random actor.")
+    .call()
+    .entity(new LenientJsonOutputConverter&#x3C;>(ActorsFilms.class));
+</code></pre>
+<p>Because this converter delegates <code>getJsonSchema()</code> to the underlying <code>BeanOutputConverter</code>, both new dials still work — <code>validateSchema()</code> and <code>useProviderStructuredOutput()</code> operate against the same schema the default converter would use. You get resilient parsing plus self-correction with no extra wiring.</p>
+<blockquote>
+<p><strong>The role of <code>getJsonSchema()</code>.</strong> Added in 2.0 as a default method on <code>StructuredOutputConverter</code>, <code>getJsonSchema()</code> is the bridge that lets a converter participate in <code>useProviderStructuredOutput()</code> and <code>validateSchema()</code>. Implement it to return your schema (typically by delegating to a <code>BeanOutputConverter</code>) and the new dials work; leave it at the default and both dials become no-ops for that converter.</p>
+</blockquote>
+<h3 id="non-json-formats" style="position:relative;"><a href="#non-json-formats" aria-label="non json formats permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Non-JSON formats</h3>
+<p>For formats outside JSON's reach — YAML for config generators, CSV for data extraction — implement <code>StructuredOutputConverter</code> from scratch: write your own <code>getFormat()</code> prompt and your own <code>convert(...)</code> parser. Leave <code>getJsonSchema()</code> at its default, and both new dials sit out — the prompt-based path runs as it does for the built-ins.</p>
+<hr>
+<h2 id="cheat-sheet" style="position:relative;"><a href="#cheat-sheet" aria-label="cheat sheet permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Cheat Sheet</h2>
+<table>
+<thead>
+<tr>
+<th>You need</th>
+<th>Use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Default — works on every provider</td>
+<td><code>.entity(Type.class)</code></td>
+</tr>
+<tr>
+<td>Generic types like <code>List&#x3C;T></code>, <code>Map&#x3C;K,V></code></td>
+<td><code>.entity(new ParameterizedTypeReference&#x3C;...>() {})</code></td>
+</tr>
+<tr>
+<td>Don't fail on malformed output</td>
+<td><code>.entity(Type.class, spec -> spec.validateSchema())</code></td>
+</tr>
+<tr>
+<td>Stronger upstream guarantees from the provider</td>
+<td><code>.entity(Type.class, spec -> spec.useProviderStructuredOutput())</code></td>
+</tr>
+<tr>
+<td>Both — request constraint + response retry</td>
+<td><code>.entity(Type.class, spec -> spec.useProviderStructuredOutput().validateSchema())</code></td>
+</tr>
+<tr>
+<td>Token usage / metadata alongside the entity</td>
+<td><code>.responseEntity(...)</code> (same overloads)</td>
+</tr>
+<tr>
+<td>Model wraps JSON in markdown fences, or non-JSON format</td>
+<td>Implement <code>StructuredOutputConverter&#x3C;T></code> and pass it to <code>.entity(...)</code></td>
+</tr>
+<tr>
+<td>Streaming responses</td>
+<td>Not supported — <code>.entity(...)</code> is <code>.call()</code>-only; <code>.stream()</code> returns text chunks, not typed objects</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="wrapping-up" style="position:relative;"><a href="#wrapping-up" aria-label="wrapping up permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Wrapping Up</h2>
+<p>Structured output in Spring AI 2.0 is the same <code>.entity(...)</code> call you already know, with two new switches: <code>validateSchema()</code> for response-side self-correction, <code>useProviderStructuredOutput()</code> for request-side enforcement. Each is independently useful; together they constrain the request and self-correct the response. Existing code keeps working unchanged; new code can opt in per call without rewiring the application.</p>
+<hr>
+<h2 id="references" style="position:relative;"><a href="#references" aria-label="references permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>References</h2>
+<ul>
+<li><a href="https://docs.spring.io/spring-ai/reference/api/structured-output-converter.html">Structured Output Converter Reference</a></li>
+<li><a href="https://docs.spring.io/spring-ai/reference/api/chatclient.html">ChatClient Reference</a></li>
+<li><a href="https://docs.spring.io/spring-ai/reference/api/advisors-recursive.html">Recursive Advisors Reference</a> — covers <code>StructuredOutputValidationAdvisor</code></li>
+<li><a href="https://spring.io/blog/2026/06/15/spring-ai-composable-tool-calling">Tool Calling in Spring AI 2.0</a> — companion piece; tool input schemas use the same generator</li>
+<li><a href="https://json-schema.org/specification-links#2020-12">JSON Schema Specification 2020-12</a> — the schema dialect Spring AI generates against</li>
+</ul>

@@ -1,0 +1,107 @@
+<p>Earlier this week, Ollama <a href="https://ollama.com/blog/tool-support">introduced</a> an exciting new feature: tool support for Large Language Models (LLMs).</p>
+<p>Today, we're thrilled to announce that <a href="https://docs.spring.io/spring-ai/reference/api/chat/ollama-chat.html#_function_calling">Spring AI</a> (1.0.0-SNAPSHOT) has fully embraced this powerful feature, bringing Ollama's function calling capabilities to the Spring ecosystem.</p>
+<p>Ollama's tool support allows models to make decisions about when to call external functions and how to use the returned data. This opens up a world of possibilities, from accessing real-time information to performing complex calculations. Spring AI takes this concept and integrates it seamlessly with the Spring ecosystem, making it incredibly easy for Java developers to leverage this functionality in their applications. Key Features of Spring AI's Ollama Function Calling Support includes:</p>
+<ul>
+<li>Easy Integration: Register your Java functions as Spring beans and use them with Ollama models.</li>
+<li>Flexible Configuration: Multiple ways to register and configure functions.</li>
+<li>Automatic JSON Schema Generation: Spring AI handles the conversion of your Java methods into JSON schemas that Ollama can understand.</li>
+<li>Support for Multiple Functions: Register and use multiple functions in a single chat session.</li>
+<li>Runtime Function Selection: Dynamically choose which functions to enable for each prompt.</li>
+<li>Code Portability: Reuse your application code without changes with  different LLM providers such as OpenAI, Mistral, VertexAI, Anthropic, Groq without code changes.</li>
+</ul>
+<h1 id="how-it-works" style="position:relative;"><a href="#how-it-works" aria-label="how it works permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>How It Works</h1>
+<ul>
+<li>Define custom Java functions and register them with Spring AI.</li>
+</ul>
+<p><img src="https://static.spring.io/blog/contentful/20240923/Restored_Spring_AI__1_.jpg" alt="Restored Spring AI (1)"></p>
+<ul>
+<li>Perform chat request that might need function calling to complete the answer.</li>
+<li>When the AI model determines it needs to call a function, it generates a JSON object with the function name and arguments.</li>
+<li>Spring AI intercepts this request, calls your Java function, and returns the result to the model.</li>
+<li>The model incorporates the function's output into its response.</li>
+</ul>
+<h1 id="getting-started" style="position:relative;"><a href="#getting-started" aria-label="getting started permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Getting Started</h1>
+<h4 id="prerequisite" style="position:relative;"><a href="#prerequisite" aria-label="prerequisite permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Prerequisite</h4>
+<p>You first need to run Ollama (<code>0.2.8+</code>) on your local machine. Refer to the official Ollama project <a href="https://github.com/ollama/ollama">README</a> to get started running models on your local machine.
+Then pull a tools supporting model such as <code>Llama 3.1</code>, <code>Mistral</code>, <code>Firefunction v2</code>, <code>Command-R +</code>...
+A list of supported models can be found under the <a href="https://ollama.com/search?c=tools">Tools category on the models page</a>.</p>
+<pre><code>ollama run mistral
+</code></pre>
+<h4 id="dependencies" style="position:relative;"><a href="#dependencies" aria-label="dependencies permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Dependencies</h4>
+<p>To start using Ollama function calling with Spring AI, add the following dependency to your project:</p>
+<pre><code>&#x3C;dependency>
+  &#x3C;groupId>org.springframework.ai&#x3C;/groupId>
+  &#x3C;artifactId>spring-ai-ollama-spring-boot-starter&#x3C;/artifactId>
+&#x3C;/dependency>
+</code></pre>
+<p>Refer to the <a href="https://docs.spring.io/spring-ai/reference/getting-started.html#dependency-management">Dependency Management</a> section to add the Spring AI BOM to your build file.</p>
+<h4 id="example" style="position:relative;"><a href="#example" aria-label="example permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Example</h4>
+<p>Here's a simple example of how to use Ollama function calling with Spring AI:</p>
+<pre><code>@SpringBootApplication
+public class OllamaApplication {
+
+	public static void main(String[] args) {
+		SpringApplication.run(OllamaApplication.class, args);
+	}
+
+	@Bean
+	CommandLineRunner runner(ChatClient.Builder chatClientBuilder) {
+		return args -> {
+			var chatClient = chatClientBuilder.build();
+
+			var response = chatClient.prompt()
+				.user("What is the weather in Amsterdam and Paris?")
+				.functions("weatherFunction") // reference by bean name.
+				.call()
+				.content();
+
+			System.out.println(response);
+		};
+	}
+
+	@Bean
+	@Description("Get the weather in location")
+	public Function&#x3C;WeatherRequest, WeatherResponse> weatherFunction() {
+		return new MockWeatherService();
+	}
+
+	public static class MockWeatherService implements Function&#x3C;WeatherRequest, WeatherResponse> {
+
+		public record WeatherRequest(String location, String unit) {}
+		public record WeatherResponse(double temp, String unit) {}
+
+		@Override
+		public WeatherResponse apply(WeatherRequest request) {
+			double temperature = request.location().contains("Amsterdam") ? 20 : 25;
+			return new WeatherResponse(temperature, request.unit);
+		}
+	}
+}
+</code></pre>
+<p>In this example, when the model needs weather information, it will automatically call the <code>weatherFunction</code> bean, which can then fetch real-time weather data.</p>
+<p>The expected response looks like this: "<em>The weather in Amsterdam is currently 20 degrees Celsius, and the weather in Paris is currently 25 degrees Celsius.</em>"</p>
+<p>The full example code is available at: <a href="https://github.com/tzolov/ollama-tools">https://github.com/tzolov/ollama-tools</a></p>
+<h4 id="openai-compatibility" style="position:relative;"><a href="#openai-compatibility" aria-label="openai compatibility permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>OpenAI Compatibility</h4>
+<p>Ollama is OpenAI API compatible and you can use the <a href="https://docs.spring.io/spring-ai/reference/api/chat/openai-chat.html">Spring AI OpenAI</a> client to talk to Ollama and use tools.
+For this you need to use the OpenAI client but set the base-url:  <code>spring.ai.openai.chat.base-url=http://localhost:11434</code> and select one of the provided Ollama Tools models: <code>spring.ai.openai.chat.options.model=mistral</code>.</p>
+<p>Check the <a href="https://github.com/spring-projects/spring-ai/blob/main/models/spring-ai-openai/src/test/java/org/springframework/ai/openai/chat/OllamaWithOpenAiChatModelIT.java">OllamaWithOpenAiChatModelIT.java</a> tests for examples of using Ollama over Spring AI OpenAI.</p>
+<h4 id="limitations" style="position:relative;"><a href="#limitations" aria-label="limitations permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Limitations</h4>
+<p>As stated in the Ollama <a href="https://ollama.com/blog/tool-support">blog post</a>, currently their API does not support <code>Streaming Tool Calls</code> nor <code>Tool choice</code>.</p>
+<p>Once those limitations are resolved, Spring AI is ready to provide support for them as well.</p>
+<h1 id="further-information" style="position:relative;"><a href="#further-information" aria-label="further information permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Further Information</h1>
+<ul>
+<li><a href="https://docs.spring.io/spring-ai/reference/index.html">Spring AI Reference Doc</a></li>
+<li><a href="https://docs.spring.io/spring-ai/reference/api/chat/ollama-chat.html">Spring AI Ollama Integration</a></li>
+<li>Related tests: <a href="https://github.com/spring-projects/spring-ai/blob/main/models/spring-ai-ollama/src/test/java/org/springframework/ai/ollama/OllamaChatModelFunctionCallingIT.java">OllamaChatModelFunctionCallingIT</a> , <a href="https://github.com/spring-projects/spring-ai/blob/main/spring-ai-spring-boot-autoconfigure/src/test/java/org/springframework/ai/autoconfigure/ollama/tool/FunctionCallbackWrapperIT.java">FunctionCallbackWrapperIT</a>, <a href="https://github.com/spring-projects/spring-ai/blob/main/spring-ai-spring-boot-autoconfigure/src/test/java/org/springframework/ai/autoconfigure/ollama/tool/FunctionCallbackInPromptIT.java">FunctionCallbackInPromptIT</a></li>
+</ul>
+<h1 id="conclusion" style="position:relative;"><a href="#conclusion" aria-label="conclusion permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Conclusion</h1>
+<p>By building on Ollama's innovative tool support and integrating it into the Spring ecosystem, Spring AI has created a powerful new way for Java developers to create AI-enhanced applications. This feature opens up exciting possibilities for creating more dynamic and responsive AI-powered systems that can interact with real-world data and services.</p>
+<p>Some benefits of using Spring AI's Ollama Function Calling include:</p>
+<ul>
+<li>Extend AI Capabilities: Easily augment AI models with custom functionality and real-time data.</li>
+<li>Seamless Integration: Leverage existing Spring beans and infrastructure in your AI applications.</li>
+<li>Type-Safe Development: Use strongly-typed Java functions instead of dealing with raw JSON.</li>
+<li>Reduced Boilerplate: Spring AI handles the complexities of function calling, allowing you to focus on your business logic.</li>
+</ul>
+<p>We encourage you to try out this new feature and let us know how you're using it in your projects. For more detailed information and advanced usage, check out our official documentation.</p>
+<p>Happy coding with Spring AI and Ollama!</p>

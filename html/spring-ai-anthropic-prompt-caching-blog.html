@@ -1,0 +1,533 @@
+<p>Large language model API costs can accumulate quickly when applications repeatedly send the same prompt content. A typical scenario: you're building a document analyzer that includes a 3,000-token document in every request. Five questions about that document means processing 15,000 tokens of identical content at full price.</p>
+<p>Anthropic's prompt caching addresses this by allowing you to reuse previously processed prompt segments. Spring AI provides comprehensive support through strategic caching patterns that handle cache breakpoint placement and management automatically.</p>
+<p>In this blog post, we explain how prompt caching works, when to use it, and how Spring AI simplifies its implementation for you.</p>
+<h2 id="understanding-prompt-caching" style="position:relative;"><a href="#understanding-prompt-caching" aria-label="understanding prompt caching permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Understanding Prompt Caching</h2>
+<p>Prompt caching allows you to mark portions of your prompt for reuse across multiple API requests. When you enable it, Anthropic caches the specified content and charges reduced rates for cached segments in subsequent requests.</p>
+<h3 id="how-it-works" style="position:relative;"><a href="#how-it-works" aria-label="how it works permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>How It Works</h3>
+<p>The cache operates on exact prefix matching. Consider this sequence:</p>
+<pre><code>Request 1: [System Prompt] + [User: "Question 1"]
+           └─ Cached ──┘
+
+Request 2: [System Prompt] + [User: "Question 2"]
+           └─ Cache Hit ─┘    (Only this part incurs full cost)
+</code></pre>
+<p>The system generates cache keys using cryptographic hashes of prompt content up to designated cache control points. Only requests with identical content achieve cache hits—even a single character change creates a new cache entry.</p>
+<pre><code>Request 1: "You are a helpful assistant."    → Cache created
+Request 2: "You are a helpful assistant."    → Cache hit
+Request 3: "You are a helpful assistant "    → Cache miss (extra space)
+Request 4: "You are a Helpful assistant."    → Cache miss (capitalization)
+</code></pre>
+<p>On a cache miss, the system processes content at standard rates and creates a new cache entry. This is why maintaining consistent prompt templates becomes important for effective caching.</p>
+<p><strong>Performance Impact:</strong> Beyond cost savings, Anthropic reports latency reductions of up to 85% for long prompts. In their <a href="https://www.anthropic.com/news/prompt-caching">announcement</a>, a 100K-token book example showed response time dropping from 11.5s to 2.4s with caching enabled. Note that actual latency improvements depend on how much content you're caching and your cache hit rate.</p>
+<p><strong>Cache Lifecycle:</strong> Entries refresh on each use within the TTL window (5 minutes default, 1 hour optional). After TTL expiration, the next request creates a new cache entry.</p>
+<h3 id="cost-structure" style="position:relative;"><a href="#cost-structure" aria-label="cost structure permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Cost Structure</h3>
+<p>Pricing varies significantly by model tier:</p>
+<table>
+<thead>
+<tr>
+<th>Model</th>
+<th>Base Input</th>
+<th>Cache Write</th>
+<th>Cache Read</th>
+<th>Savings</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Claude Sonnet 4.5</strong></td>
+<td>$3/MTok</td>
+<td>$3.75/MTok (+25%)</td>
+<td>$0.30/MTok</td>
+<td><strong>90%</strong></td>
+</tr>
+<tr>
+<td><strong>Claude Sonnet 4</strong></td>
+<td>$3/MTok</td>
+<td>$3.75/MTok (+25%)</td>
+<td>$0.30/MTok</td>
+<td><strong>90%</strong></td>
+</tr>
+<tr>
+<td><strong>Claude Opus 4.1</strong></td>
+<td>$15/MTok</td>
+<td>$18.75/MTok (+25%)</td>
+<td>$1.50/MTok</td>
+<td><strong>90%</strong></td>
+</tr>
+<tr>
+<td><strong>Claude Opus 4</strong></td>
+<td>$15/MTok</td>
+<td>$18.75/MTok (+25%)</td>
+<td>$1.50/MTok</td>
+<td><strong>90%</strong></td>
+</tr>
+<tr>
+<td><strong>Claude Haiku 4.5</strong></td>
+<td>$1/MTok</td>
+<td>$1.25/MTok (+25%)</td>
+<td>$0.10/MTok</td>
+<td><strong>90%</strong></td>
+</tr>
+<tr>
+<td><strong>Claude Haiku 3.5</strong></td>
+<td>$0.80/MTok</td>
+<td>$1/MTok (+25%)</td>
+<td>$0.08/MTok</td>
+<td><strong>90%</strong></td>
+</tr>
+<tr>
+<td><strong>Claude Haiku 3</strong></td>
+<td>$0.25/MTok</td>
+<td>$0.30/MTok (+25%)</td>
+<td>$0.03/MTok</td>
+<td><strong>90%</strong></td>
+</tr>
+</tbody>
+</table>
+<p><em>All code examples in this blog use Claude Sonnet 4.5 pricing unless otherwise specified.</em></p>
+<p>For more on pricing, see - <a href="https://docs.claude.com/en/docs/build-with-claude/prompt-caching#pricing">Anthropic pricing on prompt caching</a></p>
+<p><strong>Example calculation (Claude 3.5 Sonnet, 5,000 tokens):</strong></p>
+<ul>
+<li>First request: 5,000 tokens × $3.75/M = <strong>$0.01875</strong> (cache write)</li>
+<li>Subsequent requests: 5,000 tokens × $0.30/M = <strong>$0.00150</strong> (cache read)</li>
+<li><strong>Savings:</strong> 90% reduction on cached content</li>
+<li><strong>Breakeven:</strong> 2nd request (the 25% write premium is recovered immediately)</li>
+</ul>
+<h3 id="requirements-and-limitations" style="position:relative;"><a href="#requirements-and-limitations" aria-label="requirements and limitations permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Requirements and Limitations</h3>
+<p><strong>Minimum token thresholds vary by model:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Model</th>
+<th>Minimum Cacheable Tokens</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Claude Sonnet 4.5, , Claude Sonnet 4, Claude Opus 4.1, Claude Opus 4</td>
+<td>1,024</td>
+</tr>
+<tr>
+<td>Claude Haiku 3.5, Claude Haiku 3</td>
+<td>2,048</td>
+</tr>
+<tr>
+<td>Claude Haiku 4.5</td>
+<td><strong>4,096</strong></td>
+</tr>
+</tbody>
+</table>
+<p>Prompts below these thresholds cannot be cached, even when you mark them with cache control directives. Note that Claude Haiku 4.5 requires significantly more tokens (4,096) compared to other models.</p>
+<p>For more on this, see <a href="https://docs.claude.com/en/docs/build-with-claude/prompt-caching#cache-limitations">Anthropic's cacheable prompt length limitations</a>.</p>
+<p><strong>Additional constraints:</strong></p>
+<ul>
+<li>Maximum 4 cache breakpoints per request</li>
+<li>Cache TTL: 5 minutes default, 1 hour optional (at higher write cost)</li>
+<li>Cache refreshes on each use within TTL window</li>
+<li>Cache entries become available after the first response begins (not available for concurrent parallel requests)</li>
+</ul>
+<h2 id="cache-hierarchy-and-cascade-invalidation" style="position:relative;"><a href="#cache-hierarchy-and-cascade-invalidation" aria-label="cache hierarchy and cascade invalidation permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Cache Hierarchy and Cascade Invalidation</h2>
+<p>Anthropic processes request components in a specific order, and this order determines how cache invalidation works.</p>
+<pre><code>┌─────────────────────────────────────────┐
+│  Request Processing Order:              │
+│                                         │
+│  1. Tools                               │
+│     ↓                                   │
+│  2. System Message                      │
+│     ↓                                   │
+│  3. Message History                     │
+└─────────────────────────────────────────┘
+</code></pre>
+<p>Changes cascade downward through this hierarchy:</p>
+<pre><code>┌──────────────────────────────────────────────────────┐
+│  Cascade Invalidation:                               │
+│                                                      │
+│  Change Tools    → Invalidates: Tools, System, Msgs  │
+│  Change System   → Invalidates: System, Msgs         │
+│  Change Messages → Invalidates: Msgs only            │
+└──────────────────────────────────────────────────────┘
+</code></pre>
+<p>Understanding this behavior is essential when choosing your caching strategy. Changes to components higher in the hierarchy invalidate all downstream caches, which directly impacts your cache hit rates.</p>
+<h2 id="spring-ai-cache-strategies" style="position:relative;"><a href="#spring-ai-cache-strategies" aria-label="spring ai cache strategies permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Spring AI Cache Strategies</h2>
+<p>Rather than requiring you to manually place cache breakpoints (which can be error-prone and tedious), Spring AI provides five strategic patterns through the <code>AnthropicCacheStrategy</code> enum. Each strategy handles cache control directive placement automatically while respecting Anthropic's 4-breakpoint limit.</p>
+<h3 id="strategy-overview" style="position:relative;"><a href="#strategy-overview" aria-label="strategy overview permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Strategy Overview</h3>
+<table>
+<thead>
+<tr>
+<th>Strategy</th>
+<th>Breakpoints</th>
+<th>Cached Content</th>
+<th>Typical Use Case</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>NONE</code></td>
+<td>0</td>
+<td>Nothing</td>
+<td>One-off requests, testing</td>
+</tr>
+<tr>
+<td><code>SYSTEM_ONLY</code></td>
+<td>1</td>
+<td>System message</td>
+<td>Stable system prompts, &#x3C;20 tools</td>
+</tr>
+<tr>
+<td><code>TOOLS_ONLY</code></td>
+<td>1</td>
+<td>Tool definitions</td>
+<td>Large tools, dynamic system prompts</td>
+</tr>
+<tr>
+<td><code>SYSTEM_AND_TOOLS</code></td>
+<td>2</td>
+<td>Tools + System</td>
+<td>20+ tools, both stable</td>
+</tr>
+<tr>
+<td><code>CONVERSATION_HISTORY</code></td>
+<td>1-4</td>
+<td>Full conversation</td>
+<td>Multi-turn conversations</td>
+</tr>
+</tbody>
+</table>
+<p>Let's take a look at each strategy with practical examples.</p>
+<h2 id="system_only-strategy" style="position:relative;"><a href="#system_only-strategy" aria-label="system_only strategy permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>SYSTEM_ONLY Strategy</h2>
+<p>This strategy caches the system message content. Since tools appear before the system message in Anthropic's request hierarchy (Tools → System → Messages), they automatically become part of the cache prefix when you place a cache breakpoint on the system message.</p>
+<p><strong>Important:</strong> Changing any tool definition will invalidate the system cache due to the cache hierarchy.</p>
+<pre><code class="language-java">String systemPrompt = """
+    You are an expert software architect specializing in distributed systems.
+    You have deep knowledge of microservices, event-driven architecture, and cloud-native patterns.
+    When analyzing systems, consider scalability, resilience, and maintainability.
+    [... additional context ...]
+    """;
+
+ChatResponse response = chatModel.call(
+    new Prompt(
+        List.of(
+            new SystemMessage(systemPrompt),
+            new UserMessage("What is microservices architecture?")
+        ),
+        AnthropicChatOptions.builder()
+            .model(AnthropicApi.ChatModel.CLAUDE_3_5_SONNET)
+            .cacheOptions(AnthropicCacheOptions.builder()
+                .strategy(AnthropicCacheStrategy.SYSTEM_ONLY)
+                .build())
+            .maxTokens(500)
+            .build()
+    )
+);
+
+// Access cache metrics
+AnthropicApi.Usage usage = (AnthropicApi.Usage) response.getMetadata()
+		.getUsage().getNativeUsage();
+
+if (usage != null) {
+	System.out.println("Cache creation: " + usage.cacheCreationInputTokens());
+	System.out.println("Cache read: " + usage.cacheReadInputTokens());
+}
+</code></pre>
+<p>On the first request, <code>cacheCreationInputTokens</code> will be greater than zero and <code>cacheReadInputTokens</code> will be zero. Subsequent requests with the same system prompt will show zero for <code>cacheCreationInputTokens</code> and a positive value for <code>cacheReadInputTokens</code>. This is how you can verify that caching is working as expected in your application.</p>
+<p>Use this strategy when your system prompt is large (meeting the minimum token threshold) and stable, but user questions vary.</p>
+<h2 id="tools_only-strategy" style="position:relative;"><a href="#tools_only-strategy" aria-label="tools_only strategy permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>TOOLS_ONLY Strategy</h2>
+<p>This strategy caches tool definitions while processing the system message fresh on each request. The use case becomes clear in multi-tenant scenarios where tools are shared but system prompts need customization.</p>
+<p>Consider a SaaS application serving multiple organizations:</p>
+<pre><code class="language-java">@Service
+public class MultiTenantAIService {
+
+    private final List&#x3C;FunctionCallback> sharedTools = List.of(
+        weatherTool,       // 500 tokens
+        calendarTool,      // 800 tokens
+        emailTool,         // 700 tokens
+        analyticsTool,     // 600 tokens
+        reportingTool,     // 900 tokens
+        // ... 15 more tools totaling 5,000+ tokens
+    );
+
+    public String handleRequest(String tenantId, String userQuery) {
+        TenantConfig config = tenantRepository.findById(tenantId);
+
+        // Each tenant requires a unique system prompt
+        String systemPrompt = """
+            You are %s's AI assistant.
+            Company values: [custom data]
+            Brand voice: [custom data]
+            Compliance requirements: [custom data]
+            """;
+
+        ChatResponse response = chatModel.call(
+            new Prompt(
+                List.of(
+                    new SystemMessage(systemPrompt),
+                    new UserMessage(userQuery)
+                ),
+                AnthropicChatOptions.builder()
+                    .model(AnthropicApi.ChatModel.CLAUDE_3_5_SONNET)
+                    .cacheOptions(AnthropicCacheOptions.builder()
+                        .strategy(AnthropicCacheStrategy.TOOLS_ONLY)
+                        .build())
+                    .toolCallbacks(sharedTools)
+                    .maxTokens(800)
+                    .build()
+            )
+        );
+
+        return response.getResult().getOutput().getText();
+    }
+}
+</code></pre>
+<p>Here's what happens:</p>
+<ul>
+<li><strong>First request (any tenant)</strong>: Tools cached at 1.25x cost</li>
+<li><strong>All subsequent requests (all tenants)</strong>: Tools read from cache at 0.1x cost</li>
+<li><strong>Each tenant's system prompt</strong>: Processed fresh at 1.0x cost (by design)</li>
+</ul>
+<p>All tenants share the same cached tool definitions, while each receives their customized system prompt. For the 5,000-token tool set, this means paying <code>$0.01875</code> once to create the cache, then <code>$0.0015</code> per request for cache reads—regardless of which tenant is making the request.</p>
+<h2 id="system_and_tools-strategy" style="position:relative;"><a href="#system_and_tools-strategy" aria-label="system_and_tools strategy permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>SYSTEM_AND_TOOLS Strategy</h2>
+<p>This strategy creates two independent cache breakpoints: one for tools (breakpoint 1) and one for the system message (breakpoint 2). This separation matters when you have more than 20 tools or when you need deterministic caching of both components.</p>
+<p>The key advantage: changing the system message does not invalidate the tool cache.</p>
+<pre><code class="language-java">ChatResponse response = chatModel.call(
+    new Prompt(
+        List.of(
+            new SystemMessage(systemPrompt),
+            new UserMessage(userQuery)
+        ),
+        AnthropicChatOptions.builder()
+            .model(AnthropicApi.ChatModel.CLAUDE_3_5_SONNET)
+            .cacheOptions(AnthropicCacheOptions.builder()
+                .strategy(AnthropicCacheStrategy.SYSTEM_AND_TOOLS)
+                .build())
+            .toolCallbacks(toolCallbacks)
+            .maxTokens(500)
+            .build()
+    )
+);
+</code></pre>
+<p>The cache keys work as follows:</p>
+<ul>
+<li><strong>Breakpoint 1 (tools)</strong>: <code>hash(tools)</code></li>
+<li><strong>Breakpoint 2 (system)</strong>: <code>hash(tools + system)</code></li>
+</ul>
+<p><strong>Cascade Behavior:</strong></p>
+<ul>
+<li><strong>System changes only:</strong> Tool cache (breakpoint 1) remains valid, system cache (breakpoint 2) invalidated</li>
+<li><strong>Tool changes:</strong> Both caches invalidated</li>
+</ul>
+<p>This makes SYSTEM_AND_TOOLS ideal when your system prompt changes more frequently than your tools, allowing efficient reuse of the tool cache.</p>
+<h2 id="conversation_history-strategy" style="position:relative;"><a href="#conversation_history-strategy" aria-label="conversation_history strategy permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>CONVERSATION_HISTORY Strategy</h2>
+<p>For multi-turn conversations, this strategy caches the entire conversation history incrementally. Spring AI places a cache breakpoint on the last user message in the conversation history. This is particularly useful when building conversational AI applications (such as chatbots, virtual assistants, and customer support systems).</p>
+<pre><code class="language-java">ChatClient chatClient = ChatClient.builder(chatModel)
+    .defaultSystem("You are a personalized career counselor with 20 years of experience...")
+    .defaultAdvisors(MessageChatMemoryAdvisor.builder(chatMemory)
+        .conversationId(conversationId)
+        .build())
+    .build();
+
+String response = chatClient.prompt()
+    .user("What career advice would you give me based on our conversation?")
+    .options(AnthropicChatOptions.builder()
+        .model(AnthropicApi.ChatModel.CLAUDE_3_5_SONNET)
+        .cacheOptions(AnthropicCacheOptions.builder()
+            .strategy(AnthropicCacheStrategy.CONVERSATION_HISTORY)
+            .build())
+        .maxTokens(500)
+        .build())
+    .call()
+    .content();
+</code></pre>
+<p>The cache grows incrementally as the conversation progresses:</p>
+<pre><code>Turn 1: Cache [U1]
+Turn 2: Reuse [U1], cache [U1 + A1 + U2]
+Turn 3: Reuse [U1 + A1 + U2], cache [U1 + A1 + U2 + A2 + U3]
+Turn 4: Reuse [U1 + A1 + U2 + A2 + U3], cache [full history + U4]
+</code></pre>
+<p>By turn 10 in a conversation, you might have 20,000 tokens of history cached, paying just 10% of the normal cost for that context on each subsequent turn.</p>
+<p><strong>Critical Requirement: Tool and System Stability</strong></p>
+<p>When using <code>CONVERSATION_HISTORY</code>, both tools and system prompts must remain stable throughout the conversation. Changes to either invalidate the entire conversation cache.</p>
+<h2 id="example-partnership-agreement-analysis" style="position:relative;"><a href="#example-partnership-agreement-analysis" aria-label="example partnership agreement analysis permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Example: Partnership Agreement Analysis</h2>
+<p>Here's a complete example showing cache efficiency for multi-question document analysis:</p>
+<pre><code class="language-java">@Service
+public class ContractAnalyzer {
+
+    private final AnthropicChatModel chatModel;
+    private final PdfExtractor pdfExtractor;
+
+    public AnalysisReport analyzeAgreement(String agreementPdf) {
+        // Extract text from PDF (typically 2,000-5,000 tokens)
+        String agreementText = pdfExtractor.extract(agreementPdf);
+
+        String systemPrompt = """
+            You are an expert business analyst specializing in partnership agreements.
+            Analyze the following partnership agreement and provide insights about
+            collaboration terms, value propositions, and strategic opportunities.
+
+            AGREEMENT:
+            %s
+            """.formatted(agreementText);
+
+        String[] questions = {
+            "What are the key collaboration opportunities outlined in this agreement?",
+            "Summarize the revenue sharing and financial arrangements.",
+            "What intellectual property rights and licensing terms are defined?",
+            "Identify the strategic value propositions for both parties.",
+            "What are the performance milestones and success metrics?"
+        };
+
+        AnalysisReport report = new AnalysisReport();
+
+        AnthropicChatOptions options = AnthropicChatOptions.builder()
+            .model(AnthropicApi.ChatModel.CLAUDE_3_5_SONNET)
+            .cacheOptions(AnthropicCacheOptions.builder()
+                .strategy(AnthropicCacheStrategy.SYSTEM_ONLY)
+                .messageTypeTtl(MessageType.SYSTEM, AnthropicCacheTtl.ONE_HOUR)
+                .build())
+            .maxTokens(1000)
+            .build();
+
+        for (int i = 0; i &#x3C; questions.length; i++) {
+            ChatResponse response = chatModel.call(
+                new Prompt(
+                    List.of(
+                        new SystemMessage(systemPrompt),
+                        new UserMessage(questions[i])
+                    ),
+                    options
+                )
+            );
+
+            String answer = response.getResult().getOutput().getText();
+            report.addSection(questions[i], answer);
+
+            // Log cache performance
+            AnthropicApi.Usage usage = (AnthropicApi.Usage)
+                response.getMetadata().getUsage().getNativeUsage();
+
+            if (usage != null) {
+                if (i == 0) {
+                    logger.info("First question - Cache created: {} tokens",
+                        usage.cacheCreationInputTokens());
+                } else {
+                    logger.info("Question {} - Cache read: {} tokens",
+                        i + 1, usage.cacheReadInputTokens());
+                }
+            }
+        }
+
+        return report;
+    }
+}
+</code></pre>
+<p>With a 3,500-token system prompt (agreement + instructions) using Claude 3.5 Sonnet:</p>
+<ul>
+<li><strong>First question</strong>: 3,500 tokens × $3.75/M = $0.013 (cache write)</li>
+<li><strong>Questions 2-5</strong>: 3,500 tokens × $0.30/M = $0.001 (cache read) each</li>
+<li><strong>Total cached content cost</strong>: $0.013 + (4 × $0.001) = $0.017</li>
+<li><strong>Without caching</strong>: 5 × (3,500 tokens × $3.00/M) = $0.053</li>
+</ul>
+<p>This represents a 68% cost reduction for the cached system prompt portion. The actual total savings will be lower when you factor in the user question tokens and output tokens (which are not cached), but the reduction becomes more significant with more questions or larger documents.</p>
+<h2 id="getting-started" style="position:relative;"><a href="#getting-started" aria-label="getting started permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Getting Started</h2>
+<p><strong>Note:</strong> Prompt caching support is available in Spring AI <code>1.1.0</code> and later. Try it with the latest <code>1.1.0-SNAPSHOT</code> version.</p>
+<p>Add the Spring AI Anthropic starter to your project:</p>
+<pre><code class="language-xml">&#x3C;dependency>
+    &#x3C;groupId>org.springframework.ai&#x3C;/groupId>
+    &#x3C;artifactId>spring-ai-anthropic-spring-boot-starter&#x3C;/artifactId>
+&#x3C;/dependency>
+</code></pre>
+<p>Configure your API key in your application properties:</p>
+<pre><code class="language-properties">spring.ai.anthropic.api-key=${ANTHROPIC_API_KEY}
+</code></pre>
+<p>Inject and use in your application:</p>
+<pre><code class="language-java">@Autowired
+private AnthropicChatModel chatModel;
+
+// Start using caching strategies immediately
+</code></pre>
+<h2 id="advanced-configuration-options" style="position:relative;"><a href="#advanced-configuration-options" aria-label="advanced configuration options permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Advanced Configuration Options</h2>
+<h3 id="extended-cache-ttl" style="position:relative;"><a href="#extended-cache-ttl" aria-label="extended cache ttl permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Extended Cache TTL</h3>
+<p>The default cache TTL is 5 minutes. For scenarios where requests arrive less frequently, you can configure a 1-hour cache:</p>
+<pre><code class="language-java">AnthropicChatOptions options = AnthropicChatOptions.builder()
+    .model(AnthropicApi.ChatModel.CLAUDE_3_5_SONNET)
+    .cacheOptions(AnthropicCacheOptions.builder()
+        .strategy(AnthropicCacheStrategy.SYSTEM_ONLY)
+        .messageTypeTtl(MessageType.SYSTEM, AnthropicCacheTtl.ONE_HOUR)
+        .build())
+    .maxTokens(500)
+    .build();
+</code></pre>
+<p>Spring AI automatically adds the required beta header (<code>anthropic-beta: extended-cache-ttl-2025-04-11</code>) when you configure 1-hour TTL.</p>
+<p><strong>When to use each TTL:</strong></p>
+<ul>
+<li><strong>5 minutes (default):</strong> Real-time conversations, frequently updated content</li>
+<li><strong>1 hour:</strong> Infrequent requests (>5 min apart), stable reference materials, lower traffic</li>
+</ul>
+<p><strong>Trade-off:</strong> 1-hour cache writes cost <strong>2x</strong> vs 5-minute writes ($6/M vs $3.75/M for Claude 3.5 Sonnet). Evaluate your application's request patterns and stability requirements to determine which TTL makes sense.</p>
+<h3 id="content-length-filtering" style="position:relative;"><a href="#content-length-filtering" aria-label="content length filtering permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Content Length Filtering</h3>
+<p>You can set minimum content lengths per message type to optimize breakpoint usage:</p>
+<pre><code class="language-java">AnthropicCacheOptions cache = AnthropicCacheOptions.builder()
+    .strategy(AnthropicCacheStrategy.CONVERSATION_HISTORY)
+    .messageTypeMinContentLength(MessageType.SYSTEM, 1024)
+    .messageTypeMinContentLength(MessageType.USER, 512)
+    .messageTypeMinContentLength(MessageType.ASSISTANT, 512)
+    .build();
+</code></pre>
+<p>For precise token counting, you can provide a custom length function:</p>
+<pre><code class="language-java">AnthropicCacheOptions cache = AnthropicCacheOptions.builder()
+    .strategy(AnthropicCacheStrategy.CONVERSATION_HISTORY)
+    .contentLengthFunction(text -> customTokenCounter.count(text))
+    .build();
+</code></pre>
+<p>By default, Spring AI uses string length as a proxy for token count, but for production scenarios, you might want to consider injecting a proper token counter.</p>
+<h2 id="implementation-details" style="position:relative;"><a href="#implementation-details" aria-label="implementation details permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Implementation Details</h2>
+<p>For those interested in internals, here's how Spring AI handles cache management:</p>
+<pre><code>┌─────────────────────────────────────────────────────────┐
+│  Request Flow:                                          │
+│                                                         │
+│  Application                                            │
+│      ↓                                                  │
+│  AnthropicChatModel                                     │
+│      ↓                                                  │
+│  CacheEligibilityResolver                               │
+│    (created from strategy)                              │
+│      ↓                                                  │
+│  For each component:                                    │
+│    - Check strategy eligibility                         │
+│    - Verify minimum content length                      │
+│    - Confirm breakpoint availability (&#x3C;4)               │
+│    - Add cache_control if eligible                      │
+│      ↓                                                  │
+│  Build request with cache markers                       │
+│      ↓                                                  │
+│  Add beta headers if needed (1h TTL)                    │
+│      ↓                                                  │
+│  Anthropic API                                          │
+│      ↓                                                  │
+│  Response with cache metrics                            │
+└─────────────────────────────────────────────────────────┘
+</code></pre>
+<p>The <code>CacheEligibilityResolver</code> determines whether each message or tool qualifies for caching based on the chosen strategy, message type eligibility, content length requirements, and available breakpoints. The <code>CacheBreakpointTracker</code> enforces Anthropic's 4-breakpoint limit with thread-safe tracking per request.</p>
+<p>For <code>CONVERSATION_HISTORY</code>, Spring AI uses aggregate eligibility checking—it considers the combined content of all message types (user, assistant, tool) within the last ~20 content blocks when determining cache eligibility. This prevents short user questions (such as "Tell me more") from blocking cache creation when there are substantial assistant responses in the conversation history.</p>
+<h2 id="practical-considerations" style="position:relative;"><a href="#practical-considerations" aria-label="practical considerations permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Practical Considerations</h2>
+<h3 id="when-caching-doesnt-help" style="position:relative;"><a href="#when-caching-doesnt-help" aria-label="when caching doesnt help permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>When Caching Doesn't Help</h3>
+<p>Avoid caching when:</p>
+<ul>
+<li>Content changes frequently (cache miss rate >50%)</li>
+<li>Prompts are below minimum token thresholds for your model</li>
+<li>Making one-off requests with no reuse patterns</li>
+<li>Tools or system prompts change more often than content is reused</li>
+</ul>
+<h3 id="strategy-anti-patterns" style="position:relative;"><a href="#strategy-anti-patterns" aria-label="strategy anti patterns permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Strategy Anti-Patterns</h3>
+<p>Avoid these common mistakes:</p>
+<ul>
+<li><strong>Don't use SYSTEM_ONLY</strong> if your system prompt changes frequently—you'll pay cache write costs without getting cache hits</li>
+<li><strong>Don't use TOOLS_ONLY</strong> if your tools change frequently—you'll pay cache write costs without getting cache hits. Note that SYSTEM_ONLY won't help either when tools change frequently, since tool changes invalidate the system cache</li>
+<li><strong>Don't use CONVERSATION_HISTORY</strong> if you can't guarantee tool and system stability—changes invalidate the entire conversation cache</li>
+<li><strong>Don't use SYSTEM_AND_TOOLS</strong> if you only have a few small tools (&#x3C;20)—SYSTEM_ONLY's implicit caching is sufficient</li>
+</ul>
+<h3 id="streaming-support" style="position:relative;"><a href="#streaming-support" aria-label="streaming support permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Streaming Support</h3>
+<p>Caching works seamlessly with both streaming and non-streaming responses. Cache metrics appear in the final response chunk when using streaming. There is no difference in cache behavior between the two modes.</p>
+<h2 id="conclusion" style="position:relative;"><a href="#conclusion" aria-label="conclusion permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Conclusion</h2>
+<p>Prompt caching in Anthropic Claude provides significant cost and latency benefits for applications with reusable prompt content. Spring AI's strategic approach simplifies implementation by automatically handling cache breakpoint placement, breakpoint limits, and TTL configuration.</p>
+<p>The five caching strategies cover common usage patterns, from simple system prompt caching to complex multi-turn conversations. For most applications, selecting the appropriate strategy based on content stability patterns is sufficient—Spring AI handles the implementation details.</p>
+<p>For additional information, see the <a href="https://docs.spring.io/spring-ai/reference/api/chat/anthropic-chat.html#_prompt_caching">Spring AI Anthropic documentation</a> and <a href="https://docs.claude.com/en/docs/build-with-claude/prompt-caching">Anthropic's prompt caching guide</a>.</p>

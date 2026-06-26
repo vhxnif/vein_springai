@@ -1,0 +1,325 @@
+<h4 id="file-based-long-term-memory-for-spring-ai-agents" style="position:relative;"><a href="#file-based-long-term-memory-for-spring-ai-agents" aria-label="file based long term memory for spring ai agents permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a><em>File-Based Long-Term Memory for Spring AI Agents</em></h4>
+<p>Agents are only as useful as what they remember. Spring AI's <a href="https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/chat-memory.html#page-title">Chat Memory</a> stores the full conversation and can persist it across restarts, but when the window fills, the oldest messages are evicted. The upcoming <code>Session API</code> will add recursive summarization to soften this, but precise facts are still lost when details get compressed away.</p>
+<p><code>AutoMemoryTools</code> and <code>AutoMemoryToolsAdvisor</code>, part of the <a href="https://github.com/spring-ai-community/spring-ai-agent-utils">spring-ai-agent-utils</a> toolkit, give your agents a <strong>durable, file-based long-term memory</strong> that persists across sessions. The design is inspired by <a href="https://code.claude.com/docs/en/memory#auto-memory">Claude Code's auto-memory system</a> and the <a href="https://platform.claude.com/docs/en/agents-and-tools/tool-use/memory-tool">Claude API Memory Tool spec</a> - ported to Spring AI so it works with any LLM provider.</p>
+<p><strong>Long-Term Memory vs. Conversation History</strong></p>
+<p><code>ChatMemory</code> and <code>AutoMemoryTools</code> are complementary—a well-configured agent uses both. <code>ChatMemory</code> keeps the full conversation window: every turn, automatically, bounded by a sliding window. <code>AutoMemoryTools</code> is the curated layer: the AI model writes only what is <em>worth keeping forever</em>—a user preference, a project decision, a behavioral correction—to a typed Markdown file that survives indefinitely. Use <code>ChatMemory</code> for the current task; use <code>AutoMemoryTools</code> for facts that should still be available next week.</p>
+<p><strong>This is Part 6 of our Spring AI Agentic Patterns series.</strong> We've covered <a href="https://spring.io/blog/2026/01/13/spring-ai-generic-agent-skills">Agent Skills</a>, <a href="https://spring.io/blog/2026/01/16/spring-ai-ask-user-question-tool">AskUserQuestionTool</a>, <a href="https://spring.io/blog/2026/01/20/spring-ai-agentic-patterns-3-todowrite/">TodoWriteTool</a>, <a href="https://spring.io/blog/2026/01/27/spring-ai-agentic-patterns-4-task-subagents">Subagent Orchestration</a>, and <a href="https://spring.io/blog/2026/01/29/spring-ai-agentic-patterns-a2a-integration">A2A Integration</a>. Now we add memory that outlives the session.</p>
+<p>🚀 <strong>Want to jump right in?</strong> Skip to the <a href="#quick-start">Quick Start</a> section.</p>
+<h2 id="how-it-works" style="position:relative;"><a href="#how-it-works" aria-label="how it works permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>How It Works</h2>
+<p>The agent manages its own memory through six targeted tools in <code>AutoMemoryTools</code>, all scoped to a sandboxed memories directory. The diagram below shows the full request flow:</p>
+<img style="display: block; margin: auto;" src="https://raw.githubusercontent.com/spring-io/spring-io-static/refs/heads/main/blog/tzolov/20260407/spring-ai-auto-memory-flow.png" width="700" alt="AutoMemoryTools execution flow">
+<p><strong>① User request</strong> — the request, combined with the memory system prompt, flows through the Spring AI advisor stack (<code>ToolCallAdvisor</code> + <code>ChatMemoryAdvisor</code>) to the LLM. The LLM decides whether to load, create, or update memories before answering.</p>
+<p><strong>② Tool call</strong> — the LLM invokes <code>AutoMemoryTools</code>. The tools read and write typed Markdown files in the configured memory directory — <code>MEMORY.md</code> as the index, plus individual topic files such as <code>user_profile.md</code> or <code>project_history.md</code>.</p>
+<p><strong>③ Follow-up retrieve/update</strong> — the LLM may issue additional tool calls to load specific memory files or update existing ones; for example, loading a file after finding its pointer in <code>MEMORY.md</code>, or merging entries during consolidation.</p>
+<p><strong>④ Final response</strong> — once all memory operations are complete, the LLM produces its answer, which flows back through the advisor stack to the user.</p>
+<h3 id="memory-system-prompt" style="position:relative;"><a href="#memory-system-prompt" aria-label="memory system prompt permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Memory System Prompt</h3>
+<p>The memory system prompt drives this behaviour. Two variants ship in the jar:</p>
+<ul>
+<li><code>AUTO_MEMORY_TOOLS_SYSTEM_PROMPT.md</code> — used with <a href="#option-a-automemorytoolsadvisor-zero-boilerplate">Options A</a> &#x26; <a href="#option-b-manual-setup-automemorytools-directly">Option B</a>; dedicated, sandboxed <code>AutoMemoryTools</code></li>
+<li><code>AUTO_MEMORY_FILESYSTEM_TOOLS_SYSTEM_PROMPT.md</code> — used with <a href="#option-c-filesystemtools--shelltools">Option C</a>; generic <code>Read</code>/<code>Write</code>/<code>Edit</code> via <code>FileSystemTools</code></li>
+</ul>
+<p>Both memory system prompts encode the same memory model, differing only in which operations the model is told to call. They instruct the model to read <code>MEMORY.md</code> at session start, save via the two-step workflow (<code>MemoryCreate</code> → <code>MemoryInsert</code>), apply the four memory types, skip ephemeral content, verify recalled facts before acting on them, and keep the index in sync when deleting or renaming files.</p>
+<h3 id="memorymd--the-index-file" style="position:relative;"><a href="#memorymd--the-index-file" aria-label="memorymd  the index file permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>MEMORY.md — The Index File</h3>
+<p><code>MEMORY.md</code> is the always-loaded index. It's a flat list of one-line pointers to all memory files:</p>
+<pre><code class="language-markdown">- [User Profile](user_profile.md) — Alice, backend engineer, prefers short answers
+- [Feedback Testing](feedback_testing.md) — always use real DB in integration tests
+- [Project Auth Rewrite](project_auth.md) — driven by legal compliance, not tech debt
+</code></pre>
+<p>The model reads this index at the start of each session, then selectively loads the files that look relevant—keeping the context window lean even as memory grows.</p>
+<h3 id="memory-file-format" style="position:relative;"><a href="#memory-file-format" aria-label="memory file format permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Memory File Format</h3>
+<p>Each memory is a Markdown file with YAML frontmatter:</p>
+<pre><code class="language-markdown">---
+name: user profile
+description: Alice — backend engineer, prefers short answers
+type: user
+---
+
+Backend engineer named Alice.
+Prefers concise, direct responses without trailing summaries.
+</code></pre>
+<h3 id="memory-types" style="position:relative;"><a href="#memory-types" aria-label="memory types permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Memory Types</h3>
+<p>Not everything is worth keeping. The memory model defines four types, each with clear guidance on what to save and when—so the agent accumulates signal, not noise:</p>
+<ul>
+<li><strong><code>user</code></strong> — role, goals, expertise, communication style</li>
+<li><strong><code>feedback</code></strong> — corrections and confirmed approaches ("stop summarizing", "yes, that was right")</li>
+<li><strong><code>project</code></strong> — decisions and deadlines not in code or git (migration targets, freeze dates)</li>
+<li><strong><code>reference</code></strong> — pointers to external systems (Linear boards, Grafana dashboards, Slack channels)</li>
+</ul>
+<h3 id="memory-operations" style="position:relative;"><a href="#memory-operations" aria-label="memory operations permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Memory Operations</h3>
+<p><code>AutoMemoryTools</code> exposes six purpose-named, sandboxed operations. Option C achieves the same outcome through the general-purpose <code>FileSystemTools</code> and <code>ShellTools</code> operations.</p>
+<div style="display: flex; gap: 2rem; align-items: flex-start;">
+<div style="flex: 1;">
+<h4 id="automemorytools" style="position:relative;"><a href="#automemorytools" aria-label="automemorytools permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>AutoMemoryTools</h4>
+<p>Options A and B use <code>AutoMemoryTools</code>, which implements the <a href="https://platform.claude.com/docs/en/agents-and-tools/tool-use/memory-tool">Claude API Memory Tool specification</a> one-to-one with purpose-named, sandboxed operations:</p>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MemoryView</code></td>
+<td>Read a file with line numbers, or list a directory two levels deep</td>
+</tr>
+<tr>
+<td><code>MemoryCreate</code></td>
+<td>Create a new memory file (Step 1 of two-step save)</td>
+</tr>
+<tr>
+<td><code>MemoryStrReplace</code></td>
+<td>Replace an exact, unique string in an existing file</td>
+</tr>
+<tr>
+<td><code>MemoryInsert</code></td>
+<td>Insert text after a given line number—primary use: appending to <code>MEMORY.md</code></td>
+</tr>
+<tr>
+<td><code>MemoryDelete</code></td>
+<td>Delete a file or directory recursively</td>
+</tr>
+<tr>
+<td><code>MemoryRename</code></td>
+<td>Rename or move a file; updates <code>MEMORY.md</code> link separately</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div style="flex: 1;">
+<h4 id="filesystemtools--shelltools" style="position:relative;"><a href="#filesystemtools--shelltools" aria-label="filesystemtools  shelltools permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>FileSystemTools &#x26; ShellTools</h4>
+<p>Option C uses the general-purpose <code>FileSystemTools</code> and <code>ShellTools</code> instead, mapping to the same operations:</p>
+<table>
+<thead>
+<tr>
+<th>Operation</th>
+<th>Equivalent to</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Read</code></td>
+<td><code>MemoryView</code></td>
+</tr>
+<tr>
+<td><code>Write</code></td>
+<td><code>MemoryCreate</code></td>
+</tr>
+<tr>
+<td><code>Edit</code></td>
+<td><code>MemoryStrReplace</code> / <code>MemoryInsert</code></td>
+</tr>
+<tr>
+<td><code>Bash</code> (e.g. <code>rm</code>, <code>mv</code>)</td>
+<td><code>MemoryDelete</code> / <code>MemoryRename</code></td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<p>Options A and B sandbox all paths; Option C has no sandbox — the agent has full filesystem access.</p>
+<h2 id="integration-approaches" style="position:relative;"><a href="#integration-approaches" aria-label="integration approaches permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Integration Approaches</h2>
+<p>There are three ways to add long-term memory to a Spring AI agent, ranging from zero-boilerplate to fully manual.
+Choose based on how much control you need over the system prompt, the security concerns and whether your agent already uses general-purpose filesystem tools.</p>
+<h3 id="option-a-automemorytoolsadvisor-zero-boilerplate" style="position:relative;"><a href="#option-a-automemorytoolsadvisor-zero-boilerplate" aria-label="option a automemorytoolsadvisor zero boilerplate permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Option A: AutoMemoryToolsAdvisor (zero-boilerplate)</h3>
+<p>Drop a single advisor into your <code>ChatClient</code> builder:</p>
+<pre><code class="language-java">ChatClient chatClient = ChatClient.builder(chatModel)
+    .defaultAdvisors(
+        // Long-term memory — facts that survive across sessions
+        AutoMemoryToolsAdvisor.builder()
+            .memoriesRootDirectory("/home/user/.agent/memories")
+            .build(),
+
+        // Conversation history — full message window for this session
+        MessageChatMemoryAdvisor.builder(
+            MessageWindowChatMemory.builder().maxMessages(100).build())
+            .build(),
+
+        // Tool calling
+        ToolCallAdvisor.builder().disableInternalConversationHistory().build())
+    .build();
+</code></pre>
+<p>On every request the advisor automatically injects <code>AUTO_MEMORY_TOOLS_SYSTEM_PROMPT.md</code> into the system message, registers all six <code>AutoMemoryTools</code> (deduplicating any existing registrations), and optionally appends a consolidation reminder if the <code>memoryConsolidationTrigger</code> fires.</p>
+<img style="display: block; margin: auto;" src="https://raw.githubusercontent.com/spring-io/spring-io-static/refs/heads/main/blog/tzolov/20260407/spring-ai-auto-memory-tools-advisor.png" width="800" alt="AutoMemoryTools Advisor">
+<p><code>AutoMemoryToolsAdvisor</code> runs first in the chain, augmenting the request context with the memory system prompt and the six tool definitions before handing off to <code>ToolCallAdvisor</code> and <code>ChatMemoryAdvisor</code>. By the time the enriched context reaches the LLM it already contains the conversation history, tool definitions, and memory instructions—everything the model needs to decide what to load, save, or update.</p>
+<h3 id="option-b-manual-setup-automemorytools-directly" style="position:relative;"><a href="#option-b-manual-setup-automemorytools-directly" aria-label="option b manual setup automemorytools directly permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Option B: Manual Setup (AutoMemoryTools directly)</h3>
+<p>Wire <code>AutoMemoryTools</code> into your <code>ChatClient</code> alongside the companion system prompt:</p>
+<pre><code class="language-java">@Value("classpath:/prompt/AUTO_MEMORY_TOOLS_SYSTEM_PROMPT.md")
+Resource memorySystemPrompt;
+
+@Value("${agent.memory.dir}")
+String memoryDir;
+
+ChatClient chatClient = chatClientBuilder
+    .defaultSystem(p -> p
+        .text(memorySystemPrompt)
+        .param("MEMORIES_ROOT_DIERCTORY", memoryDir))
+    .defaultTools(
+        AutoMemoryTools.builder().memoriesDir(memoryDir).build(),
+        TodoWriteTool.builder().build())
+    .defaultAdvisors(ToolCallAdvisor.builder().build())
+    .build();
+</code></pre>
+<p>Use this approach when you want full control over the system prompt structure—for example, combining memory with a custom main system prompt.</p>
+<h3 id="option-c-filesystemtools--shelltools" style="position:relative;"><a href="#option-c-filesystemtools--shelltools" aria-label="option c filesystemtools  shelltools permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Option C: FileSystemTools + ShellTools</h3>
+<p>If the agent already has <code>FileSystemTools</code> and <code>ShellTools</code> for other tasks, you can implement the same memory pattern without adding <code>AutoMemoryTools</code> at all. The agent uses the same <code>Read</code>, <code>Write</code>, and <code>Edit</code> operations it would use for any file work—memory is just another directory.</p>
+<pre><code class="language-java">@Value("classpath:/prompt/AUTO_MEMORY_FILESYSTEM_TOOLS_SYSTEM_PROMPT.md")
+Resource memorySystemPrompt;
+
+@Value("${agent.memory.dir}")
+String memoryDir;
+
+ChatClient chatClient = chatClientBuilder
+    .defaultSystem(p -> p
+        .text(memorySystemPrompt)
+        .param("MEMORIES_ROOT_DIERCTORY", memoryDir))   // tells the agent where to write
+    .defaultTools(
+        ShellTools.builder().build(),         // Bash — mkdir, ls, etc.
+        FileSystemTools.builder().build())    // Read, Write, Edit — memory file operations
+    .defaultAdvisors(ToolCallAdvisor.builder().build())
+    .build();
+</code></pre>
+<p>The same memory conventions apply—typed files, <code>MEMORY.md</code> index, two-step save—but there is <strong>no sandbox</strong>: the agent has full filesystem access and stays in the configured directory by convention only.</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th><code>AutoMemoryTools</code> (Options A &#x26; B)</th>
+<th><code>FileSystemTools</code> (Option C)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Path model</strong></td>
+<td>Relative paths, sandboxed to memories root</td>
+<td>Absolute paths, full filesystem access</td>
+</tr>
+<tr>
+<td><strong>Safety</strong></td>
+<td>Built-in traversal guard</td>
+<td>No sandbox — agent follows prompt by convention</td>
+</tr>
+<tr>
+<td><strong>Tool names</strong></td>
+<td>Purpose-named (<code>MemoryCreate</code>, <code>MemoryView</code>, …)</td>
+<td>Generic (<code>Write</code>, <code>Read</code>, <code>Edit</code>)</td>
+</tr>
+<tr>
+<td><strong>Best for</strong></td>
+<td>Memory-only agents, isolation required</td>
+<td>Agents already using filesystem tools for other tasks</td>
+</tr>
+</tbody>
+</table>
+<p>This approach follows the <a href="https://code.claude.com/docs/en/memory">Claude Code auto-memory pattern</a> directly, where the same file tools serve both code editing and memory management.</p>
+<blockquote>
+<p>⚠️ <strong>Security note:</strong> With <code>FileSystemTools</code>, the agent can read and write anywhere on the filesystem. Only use this approach in trusted, controlled environments.</p>
+</blockquote>
+<h2 id="keeping-memory-clean" style="position:relative;"><a href="#keeping-memory-clean" aria-label="keeping memory clean permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Keeping Memory Clean</h2>
+<p>Over time a memory store accumulates redundant, overlapping, or stale entries. Periodically asking the agent to consolidate—merge duplicates, drop outdated facts, tighten descriptions—keeps the store lean and the <code>MEMORY.md</code> index readable.</p>
+<p><strong>Options B and C (explicit):</strong> just ask:</p>
+<pre><code>USER> Please consolidate your memory — merge duplicates and remove anything outdated.
+</code></pre>
+<p><strong>Option A (automatic trigger):</strong> <code>AutoMemoryToolsAdvisor</code> accepts a <code>memoryConsolidationTrigger</code> predicate. When it returns <code>true</code>, a <code>&#x3C;system-reminder></code> is injected into the next request's system message, prompting the model to consolidate without the user having to ask. The demo uses a dual-condition trigger—time elapsed or the user says "bye":</p>
+<pre><code class="language-java">Instant lastInteraction = Instant.now();
+
+AutoMemoryToolsAdvisor.builder()
+    .memoriesRootDirectory(memoryDir)
+    .memoryConsolidationTrigger((request, instant) -> {
+        var previous = lastInteraction;
+        lastInteraction = Instant.now();
+
+        // Consolidate when more than 60 seconds pass between turns
+        if (instant.isAfter(previous.plusSeconds(60))) {
+            return true;
+        }
+        // Also consolidate when the user says goodbye
+        var msg = request.prompt().getLastUserOrToolResponseMessage().getText();
+        return msg != null &#x26;&#x26; msg.toLowerCase().contains("bye");
+    })
+    .build()
+</code></pre>
+<p>Other useful strategies:</p>
+<pre><code class="language-java">// Probabilistic: ~5% of requests
+.memoryConsolidationTrigger((req, now) -> Math.random() &#x3C; 0.05)
+
+// Turn-count: every 50 calls
+AtomicInteger counter = new AtomicInteger();
+.memoryConsolidationTrigger((req, now) -> counter.incrementAndGet() % 50 == 0)
+</code></pre>
+<h2 id="quick-start" style="position:relative;"><a href="#quick-start" aria-label="quick start permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Quick Start</h2>
+<h3 id="1-add-the-dependency" style="position:relative;"><a href="#1-add-the-dependency" aria-label="1 add the dependency permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>1. Add the Dependency</h3>
+<pre><code class="language-xml">&#x3C;dependency>
+    &#x3C;groupId>org.springaicommunity&#x3C;/groupId>
+    &#x3C;artifactId>spring-ai-agent-utils&#x3C;/artifactId>
+    &#x3C;version>0.7.0&#x3C;/version>
+&#x3C;/dependency>
+</code></pre>
+<blockquote>
+<p><strong>Note:</strong> For the latest stable release, check the <a href="https://github.com/spring-ai-community/spring-ai-agent-utils/releases">GitHub releases page</a>. Requires Spring AI <code>2.0.0-M4+</code>.</p>
+</blockquote>
+<h3 id="2-configure-the-memory-directory" style="position:relative;"><a href="#2-configure-the-memory-directory" aria-label="2 configure the memory directory permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>2. Configure the Memory Directory</h3>
+<pre><code class="language-properties"># application.properties
+agent.memory.dir=${user.home}/.spring-ai-agent/my-app/memory
+</code></pre>
+<h3 id="3-wire-it-up" style="position:relative;"><a href="#3-wire-it-up" aria-label="3 wire it up permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>3. Wire It Up</h3>
+<pre><code class="language-java">@Value("${agent.memory.dir}")
+String memoryDir;
+
+ChatClient chatClient = chatClientBuilder
+    .defaultAdvisors(
+        // Long-term memory — facts that survive across sessions
+        AutoMemoryToolsAdvisor.builder()
+            .memoriesRootDirectory(memoryDir)
+            .build(),
+
+        // Conversation history — full message window for this session
+        MessageChatMemoryAdvisor.builder(MessageWindowChatMemory.builder().maxMessages(100).build())
+            .build(),
+
+        // Tool calling
+        ToolCallAdvisor.builder().disableInternalConversationHistory().build())
+    .build();
+</code></pre>
+<h3 id="4-see-it-in-action" style="position:relative;"><a href="#4-see-it-in-action" aria-label="4 see it in action permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>4. See It in Action</h3>
+<p>First session:</p>
+<pre><code>USER> My name is Alice. I'm a backend engineer and I prefer short answers.
+USER> Remember: we're migrating from PostgreSQL to CockroachDB this quarter.
+</code></pre>
+<p>Second session (new JVM process):</p>
+<pre><code>USER> What do you know about me?
+ASSISTANT> You're Alice, a backend engineer. You prefer short answers.
+           You're migrating from PostgreSQL to CockroachDB this quarter.
+</code></pre>
+<h2 id="example-projects" style="position:relative;"><a href="#example-projects" aria-label="example projects permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Example Projects</h2>
+<p>Three runnable examples are available in the repository:</p>
+<p><strong><a href="https://github.com/spring-ai-community/spring-ai-agent-utils/tree/main/examples/memory/memory-tools-advisor-demo">memory-tools-advisor-demo</a></strong> (Option A) — <code>AutoMemoryToolsAdvisor</code> + <code>ToolCallAdvisor</code> + <code>MessageChatMemoryAdvisor</code> + custom logging advisor, with a dual-condition consolidation trigger.</p>
+<p><strong><a href="https://github.com/spring-ai-community/spring-ai-agent-utils/tree/main/examples/memory/memory-tools-demo">memory-tools-demo</a></strong> (Option B) — <code>AutoMemoryTools</code> wired manually alongside <code>TodoWriteTool</code>, showing explicit system prompt composition.</p>
+<p><strong><a href="https://github.com/spring-ai-community/spring-ai-agent-utils/tree/main/examples/memory/memory-filesystem-tools-demo">memory-filesystem-tools-demo</a></strong> (Option C) — same memory conventions implemented with <code>FileSystemTools</code> + <code>ShellTools</code>, no dedicated memory tools required.</p>
+<p>All three support Anthropic Claude, Google Gemini, and OpenAI—uncomment the desired provider in <code>pom.xml</code> and set the API key.</p>
+<h2 id="conclusion" style="position:relative;"><a href="#conclusion" aria-label="conclusion permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Conclusion</h2>
+<p><code>AutoMemoryTools</code> is a Spring AI port of the memory patterns Anthropic pioneered in <a href="https://code.claude.com/docs/en/memory">Claude Code</a> and the <a href="https://platform.claude.com/docs/en/agents-and-tools/tool-use/memory-tool">Claude API Memory Tool specification</a>—the <code>MEMORY.md</code> index, typed files, two-step save, and sandboxed six-operation API—available to any LLM provider via Spring AI.</p>
+<p>Long-term memory is the missing layer between stateless LLM calls and truly useful agents. Add <code>AutoMemoryToolsAdvisor</code> and your agent starts accumulating knowledge that survives the session.</p>
+<p><strong>Series links:</strong></p>
+<ul>
+<li><strong>Part 1</strong>: <a href="https://spring.io/blog/2026/01/13/spring-ai-generic-agent-skills">Agent Skills</a> — Modular, reusable capabilities</li>
+<li><strong>Part 2</strong>: <a href="https://spring.io/blog/2026/01/16/spring-ai-ask-user-question-tool">AskUserQuestionTool</a> — Interactive workflows</li>
+<li><strong>Part 3</strong>: <a href="https://spring.io/blog/2026/01/20/spring-ai-agentic-patterns-3-todowrite/">TodoWriteTool</a> — Structured planning</li>
+<li><strong>Part 4</strong>: <a href="https://spring.io/blog/2026/01/27/spring-ai-agentic-patterns-4-task-subagents">Subagent Orchestration</a> — Hierarchical agent architectures</li>
+<li><strong>Part 5</strong>: <a href="https://spring.io/blog/2026/01/29/spring-ai-agentic-patterns-a2a-integration">A2A Integration</a> — Building interoperable agents</li>
+<li><strong>Part 6</strong>: AutoMemoryTools (this post) — Long-term memory across sessions</li>
+</ul>
+<h2 id="resources" style="position:relative;"><a href="#resources" aria-label="resources permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Resources</h2>
+<h4 id="spring-ai-agent-utils" style="position:relative;"><a href="#spring-ai-agent-utils" aria-label="spring ai agent utils permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Spring AI Agent Utils</h4>
+<ul>
+<li><strong>GitHub</strong>: <a href="https://github.com/spring-ai-community/spring-ai-agent-utils">spring-ai-agent-utils</a></li>
+<li><strong>AutoMemoryTools docs</strong>: <a href="https://spring-ai-community.github.io/spring-ai-agent-utils/latest-snapshot/tools/AutoMemoryTools/">AutoMemoryTools</a></li>
+<li><strong>AutoMemoryToolsAdvisor docs</strong>: <a href="https://spring-ai-community.github.io/spring-ai-agent-utils/latest-snapshot/tools/AutoMemoryToolsAdvisor/">AutoMemoryToolsAdvisor</a></li>
+<li><strong>Full documentation</strong>: <a href="https://spring-ai-community.github.io/spring-ai-agent-utils/latest-snapshot/">spring-ai-community.github.io/spring-ai-agent-utils</a></li>
+</ul>
+<h4 id="example-projects-1" style="position:relative;"><a href="#example-projects-1" aria-label="example projects 1 permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Example Projects</h4>
+<ul>
+<li><a href="https://github.com/spring-ai-community/spring-ai-agent-utils/tree/main/examples/memory/memory-tools-advisor-demo">memory-tools-advisor-demo</a> — full advisor stack (Option A)</li>
+<li><a href="https://github.com/spring-ai-community/spring-ai-agent-utils/tree/main/examples/memory/memory-tools-demo">memory-tools-demo</a> — manual setup (Option B)</li>
+<li><a href="https://github.com/spring-ai-community/spring-ai-agent-utils/tree/main/examples/memory/memory-filesystem-tools-demo">memory-filesystem-tools-demo</a> — filesystem tools approach (Option C)</li>
+</ul>

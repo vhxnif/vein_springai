@@ -1,0 +1,327 @@
+<img style="display: block; margin: 5px auto; padding: 10px;" src="https://raw.githubusercontent.com/spring-io/spring-io-static/refs/heads/main/blog/tzolov/20251217/spring-ai-tool-argument-augment-lifecycle.png" width="290" align="right">
+<p>When building AI agents with tool calling capabilities, developers often need insights into <strong>why</strong> an LLM chose a particular tool—not just which tool it selected. Understanding the model's reasoning process is important for debugging, observability, and building trustworthy AI systems.</p>
+<p>Spring AI now (2.0.0-SNAPSHOT/1.1.3-SNAPSHOT) includes the <a href="https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/tools.html#tool-argument-augmentation">Tool Argument Augmenter</a> feature that enables <strong>dynamic augmentation of tool input schemas</strong> with additional arguments before sending tool definitions to the LLM. This allows AI applications to capture extra information from the model—such as reasoning, inner thoughts, confidence levels, or metadata—that can be used by the application itself without affecting the underlying tool implementation.</p>
+<p>This technique is useful for:</p>
+<ul>
+<li><strong>Memory Enhancement</strong>: Capture the LLM's internal reasoning and insights to store in long-term memory—these "inner thoughts" become valuable context that improves the model's reasoning capabilities across extended conversations</li>
+<li><strong>Observability &#x26; Debugging</strong>: Capture the LLM's step-by-step reasoning before each tool execution</li>
+</ul>
+<blockquote>
+<p><strong>💡 Quick Start and Demo</strong>: For a quick start, jump directly to the <a href="#quick-start">Quick Start</a> section below. For a complete working example, check out the <a href="https://github.com/spring-projects/spring-ai-examples/tree/main/advisors/tool-argument-augmenter-demo">tool-argument-augmenter-demo</a> demo project and reference documentation: <a href="https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/tools.html#tool-argument-augmentation">Tool Argument Augmentation</a>.</p>
+</blockquote>
+<h4 id="tool-calling" style="position:relative;"><a href="#tool-calling" aria-label="tool calling permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Tool Calling</h4>
+<p>The <a href="https://docs.spring.io/spring-ai/reference/api/tools.html">Tool calling</a> (also known as function calling) allows LLMs to request the execution of external functions or APIs when they need to perform actions or retrieve information beyond their training data.
+The Spring AI Tool Calling flow when using the <code>ToolCallAdvisor</code> is:</p>
+<img style="display: block; margin: auto;" src="https://raw.githubusercontent.com/spring-io/spring-io-static/refs/heads/main/blog/tzolov/20251217/spring-ai-sdt-tool-calling.png" width="510" align="right">
+<ol>
+<li>User asks a question</li>
+<li>Spring AI's Tool Call Advisor sends available tool definitions with their original schemas to the LLM</li>
+<li>LLM analyzes the request, decides which tool to call, and returns a tool call request with required arguments</li>
+<li>Tool Management dispatches and invokes the actual tool</li>
+<li>Result is sent back to the LLM</li>
+<li>LLM generates the final response incorporating the tool's result</li>
+</ol>
+<h4 id="the-problem" style="position:relative;"><a href="#the-problem" aria-label="the problem permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>The Problem</h4>
+<p>Tools are defined with fixed input parameters, but AI applications often need <strong>additional context or metadata</strong> from the LLM—such as reasoning or insights—alongside standard tool inputs. These extra fields are needed by the application layer, not the tool itself. Modifying every tool to accept them would violate separation of concerns, create tight coupling, and require changes across many existing tools or even be impossible for external (MCP) tools.</p>
+<h4 id="the-tool-argument-augmenter-solution" style="position:relative;"><a href="#the-tool-argument-augmenter-solution" aria-label="the tool argument augmenter solution permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>The Tool Argument Augmenter Solution</h4>
+<p>The Tool Argument Augmenter solves this elegantly by:</p>
+<ol>
+<li><strong>Dynamically extending</strong> the tool's JSON Schema with additional fields (defined as Java Records)</li>
+<li><strong>Intercepting tool calls</strong> to extract and process the augmented arguments</li>
+<li><strong>Optionally removing</strong> the augmented arguments before passing input to the original tool</li>
+</ol>
+<p>This creates a transparent layer where the LLM sees an augmented schema and provides the extra information used by the AI application, while the underlying tool remains unchanged.
+The complete flow works as follows:</p>
+<img style="display: block; margin: auto;" src="https://raw.githubusercontent.com/spring-io/spring-io-static/refs/heads/main/blog/tzolov/20251217/spring-ai-tool-arg-augmenter.png" width="800">
+<ol>
+<li><strong>User Request:</strong> User asks "What to wear in Amsterdam today?"</li>
+<li><strong>Tool Definition:</strong> Tool Call Advisor adds the tool definitions with their original schemas to the request</li>
+<li><strong>Tool Definition Interception:</strong> Before being sent to the LLM, the Tool Argument Augmenter intercepts the tool definition and augments its schema with additional (provided) arguments (e.g., <code>innerThoughts: String</code>, <code>memoryNotes: List&#x3C;String></code>)</li>
+<li><strong>LLM Response:</strong> The LLM sees this enriched schema and provides both the original tool arguments (<code>location: "Amsterdam"</code>) AND the augmented arguments (<code>innerThoughts: "I need to check the weather to suggest appropriate clothing..."</code>)</li>
+<li><strong>Argument Processing</strong>: When the tool call request returns, the augmenter extracts the augmented arguments and passes them to a <strong>Consumer</strong> for processing (logging, memory storage, analytics, etc.)</li>
+<li><strong>Tool Execution</strong>: The original tool receives only its expected arguments—completely unaware of the augmentation</li>
+</ol>
+<blockquote>
+<p><strong>MCP Compatible:</strong> This technique works seamlessly with both local tools (e.g., <code>@Tool</code>) and MCP tools (e.g., <code>@McpTool</code>).</p>
+</blockquote>
+<h2 id="quick-start" style="position:relative;"><a href="#quick-start" aria-label="quick start permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Quick Start</h2>
+<h4 id="requirements" style="position:relative;"><a href="#requirements" aria-label="requirements permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Requirements</h4>
+<ul>
+<li><strong>Java 17</strong> or higher</li>
+<li><strong>Spring AI 2.0.0-SNAPSHOT+</strong> or <strong>Spring AI 1.1.3-SNAPSHOT+</strong></li>
+</ul>
+<p>The Tool Argument Augmenter is included in Spring AI's core module (<code>spring-ai-model</code>), so no additional dependencies are required beyond the standard Spring AI dependency.</p>
+<h4 id="1-define-augmented-arguments" style="position:relative;"><a href="#1-define-augmented-arguments" aria-label="1 define augmented arguments permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>1. Define Augmented Arguments</h4>
+<p>The most powerful use case is adding an "inner thinking" field that captures the LLM's reasoning. Define your augmented arguments as a Java Record with <code>@ToolParam</code> annotations:</p>
+<pre><code class="language-java">import org.springframework.ai.tool.annotation.ToolParam;
+
+public record AgentThinking(
+    @ToolParam(description = "Your step-by-step reasoning for why you're calling this tool and what you expect", required = true) 
+    String innerThought,
+    
+    @ToolParam(description = "Confidence level (low, medium, high) in this tool choice", required = false) 
+    String confidence,
+    
+    @ToolParam(description = "Key insights to remember for future interactions", required = true) 
+    List&#x3C;String> memoryNotes
+) {}
+</code></pre>
+<h4 id="2-wrap-your-existing-tools" style="position:relative;"><a href="#2-wrap-your-existing-tools" aria-label="2 wrap your existing tools permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>2. Wrap Your Existing Tools</h4>
+<p>Use the <code>AugmentedToolCallbackProvider</code> builder to wrap your existing tools:</p>
+<pre><code class="language-java">import org.springframework.ai.tool.augment.AugmentedToolCallbackProvider;
+
+// Your existing tool defined using Spring AI @Tool annotation
+public class WeatherTool {
+    @Tool(description = "Get the current weather for a given location")
+    public String weather(String location) {
+        return "The current weather in " + location + " is sunny with a temperature of 25°C.";
+    }
+}
+
+// Wrap with augmented arguments
+AugmentedToolCallbackProvider&#x3C;AgentThinking> provider = 
+    AugmentedToolCallbackProvider.&#x3C;AgentThinking>builder()
+        .toolObject(new WeatherTool())
+        .argumentType(AgentThinking.class)
+        .argumentConsumer(event -> {
+            // Access the augmented arguments via event.arguments()
+            AgentThinking thinking = event.arguments();
+            
+            // Log the LLM's reasoning - great for debugging and observability
+            log.info("Tool: {}, LLM Reasoning: {}, Confidence: {}",
+               event.toolDefinition().name(), thinking.innerThought(), thinking.confidence());
+                        
+            // Store insights in memory for future context
+            thinking.memoryNotes().forEach(note -> 
+                memorySystem.store(note)
+            );
+        })
+        .build();
+
+// Use with Spring AI ChatClient
+ChatClient chatClient = ChatClient.builder(chatModel)
+    .defaultToolCallbacks(provider)
+    .build();
+</code></pre>
+<h4 id="3-wrap-your-existing-toolcallbackproviders" style="position:relative;"><a href="#3-wrap-your-existing-toolcallbackproviders" aria-label="3 wrap your existing toolcallbackproviders permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>3. Wrap Your Existing ToolCallbackProviders</h4>
+<p>You can wrap existing providers (including <code>MCP</code> tool providers) instead of individual tool objects:</p>
+<pre><code class="language-java">AugmentedToolCallbackProvider&#x3C;AgentThinking> provider = 
+    AugmentedToolCallbackProvider.&#x3C;AgentThinking>builder()
+        .delegate(existingProvider)  // Wrap an existing provider
+        .argumentType(AgentThinking.class)
+        .argumentConsumer(event -> processThinking(event.arguments()))
+        .build();
+
+// Use with Spring AI ChatClient
+ChatClient chatClient = ChatClient.builder(chatModel)
+    .defaultToolCallbacks(provider)
+    .build();
+</code></pre>
+<h4 id="4-what-the-llm-sees" style="position:relative;"><a href="#4-what-the-llm-sees" aria-label="4 what the llm sees permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>4. What the LLM Sees</h4>
+<p>When the LLM receives the tool definition, it sees the <strong>augmented schema</strong> with your additional fields:</p>
+<pre><code class="language-json">{
+  "type": "object",
+  "properties": {
+    "location": {
+      "type": "string",
+      "description": "The location to get weather for"
+    },
+    "innerThought": {
+      "type": "string",
+      "description": "Your step-by-step reasoning for why you're calling this tool and what you expect"
+    },
+    "confidence": {
+      "type": "string",
+      "description": "Confidence level (low, medium, high) in this tool choice"
+    },
+    "memoryNotes": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Key insights to remember for future interactions"
+    }
+  },
+  "required": ["location", "innerThought", "memoryNotes"]
+}
+</code></pre>
+<h4 id="5-llm-response-with-reasoning" style="position:relative;"><a href="#5-llm-response-with-reasoning" aria-label="5 llm response with reasoning permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>5. LLM Response with Reasoning</h4>
+<p>The LLM will now provide its reasoning along with the tool call:</p>
+<pre><code class="language-json">{
+  "location": "Amsterdam",
+  "innerThought": "The user is asking about what to wear in Amsterdam today. I need to check the current weather conditions to provide appropriate clothing recommendations.",
+  "confidence": "high",
+  "memoryNotes": [
+    "User is planning an outing in Amsterdam",
+    "May need follow-up with specific activity questions"
+  ]
+}
+</code></pre>
+<p>Your consumer receives the <code>AgentThinking</code> record with all the reasoning, while the original tool receives only <code>{"location": "Amsterdam"}</code>.</p>
+<h4 id="6-include-reasoning-in-final-response-optional" style="position:relative;"><a href="#6-include-reasoning-in-final-response-optional" aria-label="6 include reasoning in final response optional permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>6. Include Reasoning in Final Response (Optional)</h4>
+<p>You can also include the LLM's reasoning in the final response using Spring AI's <a href="https://docs.spring.io/spring-ai/reference/api/structured-output-converter.html">Structured Output</a>. This is useful when you want to expose the model's thinking to users or downstream systems—not just capture it during tool calls.</p>
+<pre><code class="language-java">public record ResponseWithReasoning(
+    String response, 
+    AgentThinking thinking
+) {}
+
+var answer = chatClient
+    .prompt("What should I wear in Amsterdam today?")
+    .call()
+    .entity(ResponseWithReasoning.class); // structured response
+
+// Access both the response and the reasoning
+System.out.println("Answer: " + answer.response());
+System.out.println("Reasoning: " + answer.thinking().innerThought());
+</code></pre>
+<h2 id="advanced-use-cases" style="position:relative;"><a href="#advanced-use-cases" aria-label="advanced use cases permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Advanced Use Cases</h2>
+<p>You can leverage this technique for various AI agent patterns.
+The following examples demonstrate how to build memory-enhanced agents, capture chain-of-thought reasoning, collect analytics, and coordinate multi-agent systems.</p>
+<h3 id="ai-agent-memory-systems" style="position:relative;"><a href="#ai-agent-memory-systems" aria-label="ai agent memory systems permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>AI Agent Memory Systems</h3>
+<p>Combine Tool Argument Augmenter with Spring AI's advisor chain to build intelligent agents with memory. The captured inner thoughts become valuable context that improves reasoning across conversations:</p>
+<pre><code class="language-java">import org.springframework.ai.tool.augment.AugmentedToolCallbackProvider;
+
+AugmentedToolCallbackProvider&#x3C;AgentThinking> provider = AugmentedToolCallbackProvider
+    .&#x3C;AgentThinking>builder()
+    .toolObject(new MyTools())
+    .argumentType(AgentThinking.class)
+    .build();
+
+MessageWindowChatMemory chatMemory = MessageWindowChatMemory.builder()
+    .maxMessages(100)
+    .build();
+
+ChatClient chatClient = chatClientBuilder
+    .defaultToolCallbacks(provider)
+    .defaultAdvisors(
+        ToolCallAdvisor.builder()
+            .advisorOrder(BaseAdvisor.HIGHEST_PRECEDENCE + 300)
+            .conversationHistoryEnabled(false).build(),
+        MessageChatMemoryAdvisor.builder(chatMemory)
+            .order(Ordered.HIGHEST_PRECEDENCE + 1000).build())
+    .build();
+
+var answer = chatClient
+    .prompt("What is current weather in Paris?")
+    .call()
+    .entity(MyResponse.class);
+</code></pre>
+<p>This provides <strong>tool-level reasoning capture</strong>, <strong>conversation continuity</strong> via memory advisor, and <strong>full observability</strong> into LLM decision-making.</p>
+<blockquote>
+<p><strong>Note:</strong> Disable <code>ToolCallAdvisor</code>'s conversation history and ensure <code>MessageChatMemoryAdvisor</code> runs after it in the advisor chain.</p>
+</blockquote>
+<h3 id="chain-of-thought-reasoning" style="position:relative;"><a href="#chain-of-thought-reasoning" aria-label="chain of thought reasoning permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Chain of Thought Reasoning</h3>
+<p>Capture detailed step-by-step reasoning for complex tasks:</p>
+<pre><code class="language-java">public record ChainOfThought(
+    @ToolParam(description = "Break down your reasoning into numbered steps", required = true)
+    List&#x3C;String> reasoningSteps,
+    
+    @ToolParam(description = "What alternative approaches did you consider?", required = false)
+    List&#x3C;String> alternatives,
+    
+    @ToolParam(description = "Final conclusion that led to this tool choice", required = true)
+    String conclusion
+) {}
+
+// Process the reasoning chain
+Consumer&#x3C;AugmentedArgumentEvent&#x3C;ChainOfThought>> cotProcessor = event -> {
+    ChainOfThought cot = event.arguments();
+    log.info("=== Chain of Thought for {} ===", event.toolDefinition().name());
+    for (int i = 0; i &#x3C; cot.reasoningSteps().size(); i++) {
+        log.info("Step {}: {}", i + 1, cot.reasoningSteps().get(i));
+    }
+    log.info("Conclusion: {}", cot.conclusion());
+    
+    // Store for analysis or fine-tuning data collection
+    reasoningStore.save(cot);
+};
+</code></pre>
+<h3 id="tool-usage-analytics" style="position:relative;"><a href="#tool-usage-analytics" aria-label="tool usage analytics permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Tool Usage Analytics</h3>
+<p>Track and analyze tool usage patterns for optimization and insights:</p>
+<pre><code class="language-java">public record ToolAnalytics(
+    @ToolParam(description = "Why did you choose this specific tool?", required = true)
+    String toolSelectionReason,
+    
+    @ToolParam(description = "What result do you expect from this tool?", required = false)
+    String expectedOutcome,
+    
+    @ToolParam(description = "User intent classification", required = true)
+    String userIntent
+) {}
+
+Consumer&#x3C;AugmentedArgumentEvent&#x3C;ToolAnalytics>> analyticsProcessor = event -> {
+    ToolAnalytics analytics = event.arguments();
+    String toolName = event.toolDefinition().name();
+    
+    metricsCollector.recordToolSelection(
+        toolName,
+        analytics.userIntent(),
+        analytics.toolSelectionReason()
+    );
+    
+    if (analytics.expectedOutcome() != null) {
+        // Compare expected vs actual outcomes for quality metrics
+        outcomeTracker.recordExpectation(toolName, analytics.expectedOutcome());
+    }
+};
+</code></pre>
+<h3 id="multi-agent-coordination" style="position:relative;"><a href="#multi-agent-coordination" aria-label="multi agent coordination permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Multi-Agent Coordination</h3>
+<p>Enable communication and coordination between multiple AI agents:</p>
+<pre><code class="language-java">public record AgentCoordination(
+    @ToolParam(description = "Your agent ID", required = true)
+    String agentId,
+    
+    @ToolParam(description = "Agents that should be notified of this action", required = false)
+    List&#x3C;String> notifyAgents,
+    
+    @ToolParam(description = "Shared context for other agents", required = false)
+    String sharedContext,
+    
+    @ToolParam(description = "Priority level for coordination (low, normal, high, critical)", required = false)
+    String priority
+) {}
+
+Consumer&#x3C;AugmentedArgumentEvent&#x3C;AgentCoordination>> coordinationProcessor = event -> {
+    AgentCoordination coord = event.arguments();
+    String toolName = event.toolDefinition().name();
+    
+    if (coord.notifyAgents() != null &#x26;&#x26; !coord.notifyAgents().isEmpty()) {
+        Message notification = Message.builder()
+            .from(coord.agentId())
+            .toolAction(toolName)
+            .content(coord.sharedContext())
+            .priority(coord.priority() != null ? coord.priority() : "normal")
+            .build();
+        
+        coord.notifyAgents().forEach(targetAgent -> 
+            messageBus.send(targetAgent, notification)
+        );
+    }
+};
+</code></pre>
+<h2 id="best-practices" style="position:relative;"><a href="#best-practices" aria-label="best practices permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Best Practices</h2>
+<ul>
+<li><strong>Keep augmented arguments focused</strong>: Define only the fields you actually need to capture. Too many additional fields can increase token consumption and confuse the model.</li>
+<li><strong>Use descriptive field descriptions</strong>: The <code>@ToolParam</code> description is what the LLM sees. Clear, specific descriptions lead to better quality responses.</li>
+<li><strong>Consider required vs optional</strong>: Mark fields as <code>required = true</code> only when you absolutely need them. Optional fields give the LLM flexibility.</li>
+<li><strong>Monitor token usage</strong>: Augmented schemas increase prompt size. Monitor token consumption, especially with many tools.</li>
+</ul>
+<h2 id="conclusion" style="position:relative;"><a href="#conclusion" aria-label="conclusion permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Conclusion</h2>
+<p>The Tool Argument Augmenter provides a powerful, non-invasive way to capture LLM reasoning and metadata during tool execution. By dynamically extending tool schemas, you gain visibility into <strong>why</strong> an LLM makes decisions—not just what decisions it makes.</p>
+<p>This feature integrates seamlessly with Spring AI's existing tool calling infrastructure, working with both local <code>@Tool</code> methods and MCP tools without requiring any changes to the underlying implementations.</p>
+<blockquote>
+<p><strong>🚀 Try It Yourself</strong>: The complete runnable demo is available in the <a href="https://github.com/spring-projects/spring-ai-examples/tree/main/advisors/recursive-advisor-with-memory">recursive-advisor-with-memory</a> example project.</p>
+</blockquote>
+<h2 id="related-blog-posts" style="position:relative;"><a href="#related-blog-posts" aria-label="related blog posts permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Related Blog Posts</h2>
+<ul>
+<li><a href="https://spring.io/blog/2025/11/04/spring-ai-recursive-advisors">Create Self-Improving AI Agents Using Spring AI Recursive Advisors</a> - Learn how to build self-improving AI agents using recursive advisor patterns</li>
+<li><a href="https://spring.io/blog/2025/11/10/spring-ai-llm-as-judge-blog-post">LLM-as-a-Judge Evaluation with Spring AI</a> - Use LLMs to evaluate and assess AI response quality</li>
+<li><a href="https://spring.io/blog/2025/11/25/spring-ai-tool-response-formats">Tool Response Formats in Spring AI</a> - Control and customize how tool results are formatted and returned to the LLM</li>
+<li><a href="https://spring.io/blog/2025/12/11/spring-ai-tool-search-tools-tzolov">Semantic Tool Search in Spring AI</a> - Dynamically discover and select the right tools using semantic search</li>
+</ul>
+<h2 id="resources" style="position:relative;"><a href="#resources" aria-label="resources permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Resources</h2>
+<ul>
+<li><a href="https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/tools.html#tool-argument-augmentation"><strong>Tool Argument Augmentation</strong></a></li>
+<li><strong>Example Project</strong>: <a href="https://github.com/spring-projects/spring-ai-examples/tree/main/advisors/tool-argument-augmenter-demo">tool-argument-augmenter-demo</a></li>
+<li><strong>Spring AI Tool Calling</strong>: <a href="https://docs.spring.io/spring-ai/reference/api/tools.html">Tools API Documentation</a></li>
+<li><strong>Spring AI Chat Client</strong>: <a href="https://docs.spring.io/spring-ai/reference/api/chatclient.html">ChatClient Documentation</a></li>
+<li><strong>Spring AI Advisors</strong>: <a href="https://docs.spring.io/spring-ai/reference/api/advisors.html">Advisors API Guide</a></li>
+</ul>

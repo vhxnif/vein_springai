@@ -1,0 +1,85 @@
+<h1 id="using-spring-ai-100-snapshot-part-2---important-changes-and-updates" style="position:relative;"><a href="#using-spring-ai-100-snapshot-part-2---important-changes-and-updates" aria-label="using spring ai 100 snapshot part 2   important changes and updates permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Using Spring AI 1.0.0-SNAPSHOT: Part 2 - Important Changes and Updates</h1>
+<p>This blog post is a continuation of our previous article <a href="https://spring.io/blog/2025/03/25/spring-ai-using-snapshots">Using Spring AI 1.0.0-SNAPSHOT: Important Changes and Updates</a>, where we introduced the significant changes to artifact IDs, dependency management, and autoconfiguration in Spring AI 1.0.0-SNAPSHOT.</p>
+<p>Since publishing that article, the Spring team has released an updates to the snapshots, In this follow-up article, we'll explore the latest changes and provide additional guidance for developers working with the snapshot versions. For comprehensive details, refer to the <a href="https://docs.spring.io/spring-ai/reference/upgrade-notes.html">Spring AI Upgrade Notes</a>.</p>
+<h2 id="module-restructuring" style="position:relative;"><a href="#module-restructuring" aria-label="module restructuring permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Module Restructuring</h2>
+<p>As of April 4, 2025, the main branch has undergone significant changes to the module and artifact structure. Previously, <code>spring-ai-core</code> contained all central interfaces, but this has now been split into specialized domain modules to reduce unnecessary dependencies in your applications.</p>
+<h3 id="package-name-changes" style="position:relative;"><a href="#package-name-changes" aria-label="package name changes permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Package Name Changes</h3>
+<p>Some classes have moved to new packages:</p>
+<ul>
+<li><code>ContentFormatTransformer</code> and <code>KeywordMetadataEnricher</code> moved from <code>org.springframework.ai.transformer</code> to <code>org.springframework.ai.chat.transformer</code></li>
+<li><code>Content</code>, <code>MediaContent</code>, and <code>Media</code> moved from <code>org.springframework.ai.model</code> to <code>org.springframework.ai.content</code></li>
+</ul>
+<h3 id="new-module-structure" style="position:relative;"><a href="#new-module-structure" aria-label="new module structure permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>New Module Structure</h3>
+<p><img src="https://raw.githubusercontent.com/spring-projects/spring-ai/main/spring-ai-docs/src/main/antora/modules/ROOT/images/spring-ai-dependencies.png" alt="Spring AI Dependencies"></p>
+<h4 id="spring-ai-commons" style="position:relative;"><a href="#spring-ai-commons" aria-label="spring ai commons permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>spring-ai-commons</h4>
+<p>Base module with no dependencies on other Spring AI modules. Contains:</p>
+<ul>
+<li>Core domain models (<code>Document</code>, <code>TextSplitter</code>)</li>
+<li>JSON utilities and resource handling</li>
+<li>Structured logging and observability support</li>
+</ul>
+<h4 id="spring-ai-model" style="position:relative;"><a href="#spring-ai-model" aria-label="spring ai model permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>spring-ai-model</h4>
+<p>Provides AI capability abstractions:</p>
+<ul>
+<li>Interfaces like <code>ChatModel</code>, <code>EmbeddingModel</code>, and <code>ImageModel</code></li>
+<li>Message types and prompt templates</li>
+<li>Function-calling framework (<code>ToolDefinition</code>, <code>ToolCallback</code>)</li>
+<li>Content filtering and observation support</li>
+</ul>
+<h4 id="spring-ai-vector-store" style="position:relative;"><a href="#spring-ai-vector-store" aria-label="spring ai vector store permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>spring-ai-vector-store</h4>
+<p>Unified vector database abstraction:</p>
+<ul>
+<li><code>VectorStore</code> interface for similarity search</li>
+<li>Advanced filtering with SQL-like expressions</li>
+<li><code>SimpleVectorStore</code> for in-memory usage</li>
+<li>Batching support for embeddings</li>
+</ul>
+<h4 id="spring-ai-client-chat" style="position:relative;"><a href="#spring-ai-client-chat" aria-label="spring ai client chat permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>spring-ai-client-chat</h4>
+<p>High-level conversational AI APIs:</p>
+<ul>
+<li><code>ChatClient</code> interface</li>
+<li>Conversation persistence via <code>ChatMemory</code></li>
+<li>Response conversion with <code>OutputConverter</code></li>
+<li>Advisor-based interception</li>
+<li>Synchronous and reactive streaming support</li>
+</ul>
+<h4 id="spring-ai-advisors-vector-store" style="position:relative;"><a href="#spring-ai-advisors-vector-store" aria-label="spring ai advisors vector store permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>spring-ai-advisors-vector-store</h4>
+<p>Bridges chat with vector stores for RAG:</p>
+<ul>
+<li><code>QuestionAnswerAdvisor</code>: injects context into prompts</li>
+<li><code>VectorStoreChatMemoryAdvisor</code>: stores/retrieves conversation history</li>
+</ul>
+<h4 id="spring-ai-model-chat-memory-cassandra" style="position:relative;"><a href="#spring-ai-model-chat-memory-cassandra" aria-label="spring ai model chat memory cassandra permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>spring-ai-model-chat-memory-cassandra</h4>
+<p>Apache Cassandra persistence for <code>ChatMemory</code>:</p>
+<ul>
+<li><code>CassandraChatMemory</code> implementation</li>
+<li>Type-safe CQL with Cassandra's QueryBuilder</li>
+</ul>
+<h4 id="spring-ai-model-chat-memory-neo4j" style="position:relative;"><a href="#spring-ai-model-chat-memory-neo4j" aria-label="spring ai model chat memory neo4j permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>spring-ai-model-chat-memory-neo4j</h4>
+<p>Neo4j graph database persistence for chat conversations.</p>
+<h4 id="spring-ai-rag" style="position:relative;"><a href="#spring-ai-rag" aria-label="spring ai rag permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>spring-ai-rag</h4>
+<p>Comprehensive framework for Retrieval Augmented Generation:</p>
+<ul>
+<li>Modular architecture for RAG pipelines</li>
+<li><code>RetrievalAugmentationAdvisor</code> as main entry point</li>
+<li>Functional programming principles with composable components</li>
+</ul>
+<h2 id="dependency-hierarchy" style="position:relative;"><a href="#dependency-hierarchy" aria-label="dependency hierarchy permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Dependency Hierarchy</h2>
+<p>The new dependency structure follows this pattern:</p>
+<ol>
+<li><code>spring-ai-commons</code> (foundation)</li>
+<li><code>spring-ai-model</code> (depends on commons)</li>
+<li><code>spring-ai-vector-store</code> and <code>spring-ai-client-chat</code> (both depend on model)</li>
+<li><code>spring-ai-advisors-vector-store</code> and <code>spring-ai-rag</code> (depend on both client-chat and vector-store)</li>
+<li><code>spring-ai-model-chat-memory-*</code> modules (depend on client-chat)</li>
+</ol>
+<h2 id="migration-guide" style="position:relative;"><a href="#migration-guide" aria-label="migration guide permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Migration Guide</h2>
+<p>To migrate your existing Spring AI applications:</p>
+<ol>
+<li>If you are using the Spring Boot starters, you don't need to do anything as you will pick up the new artifacts as necessary.</li>
+<li>Refactor imports for relocated classes (your IDE should assist with this)</li>
+<li>If using <code>spring-ai-core</code> directly, replace with the appropriate new modules</li>
+</ol>
+<h2 id="conclusion" style="position:relative;"><a href="#conclusion" aria-label="conclusion permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Conclusion</h2>
+<p>These changes represent a significant improvement in the Spring AI architecture, allowing for more targeted dependencies and cleaner separation of concerns. By breaking the monolithic core into domain-specific modules, applications can now include only the functionality they need, resulting in smaller deployments and clearer boundaries between components.</p>
+<p>For more details, refer to the <a href="https://docs.spring.io/spring-ai/reference/">official Spring AI documentation</a>.</p>
