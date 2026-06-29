@@ -1,0 +1,403 @@
+<p>As AI agents connect to more services—Slack, GitHub, Jira, MCP servers—tool libraries grow rapidly. A typical multi-server setup can easily have 50+ tools consuming <strong>55,000+ tokens</strong> before any conversation starts. Worse, tool selection accuracy degrades when models face 30+ similarly-named tools.</p>
+<img style="display: block; margin: 1px auto; padding: 7px;" src="https://raw.githubusercontent.com/spring-io/spring-io-static/refs/heads/main/blog/tzolov/20251208/spring-ai-tool-search-tool-overview.png" width="250" align="right">
+<p>The <strong><a href="https://www.anthropic.com/engineering/advanced-tool-use">Tool Search Tool</a></strong> pattern, pioneered by Anthropic, addresses this: instead of loading all tool definitions upfront, the model discovers tools on-demand. It receives only a search tool initially, queries for capabilities when needed, and gets relevant tool definitions expanded into context. This achieves <strong>significant token savings</strong> while maintaining access to hundreds of tools.</p>
+<p><strong>The key insight:</strong> While Anthropic introduced this pattern for Claude, we can implement the same approach for <strong>any LLM</strong> using Spring AI's <strong><a href="https://docs.spring.io/spring-ai/reference/api/advisors-recursive.html">Recursive Advisors</a></strong>.
+Spring AI provides a portable abstraction that makes dynamic tool discovery work across OpenAI, Anthropic, Gemini, Ollama, Azure OpenAI, and any other LLM provider supported by Spring AI.</p>
+<p><strong>Our preliminary benchmarks show Spring AI's Tool Search Tool implementation achieves 34-64% token reduction</strong> across OpenAI, Anthropic, and Gemini models while maintaining full access to hundreds of tools.</p>
+<blockquote>
+<p><strong>Update (Spring AI 2.0.0 GA):</strong> The Tool Search Tool has been promoted from the <a href="https://github.com/spring-ai-community/spring-ai-tool-search-tool">Spring AI Community</a> into the core <a href="https://github.com/spring-projects/spring-ai">Spring AI</a> project. The API has been updated to align with Spring AI 2.0.0 conventions — see the <a href="#getting-started">Getting Started</a> section for the new Maven coordinates and usage.</p>
+</blockquote>
+<h2 id="how-tool-calling-works" style="position:relative;"><a href="#how-tool-calling-works" aria-label="how tool calling works permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>How Tool Calling Works</h2>
+<p>First, let's understand how Spring AI's <a href="https://docs.spring.io/spring-ai/reference/api/tools.html">tool calling</a> works when using the <a href="https://docs.spring.io/spring-ai/reference/api/advisors-recursive.html#_toolcalladvisor">ToolCallingAdvisor</a> - a special recursive advisor that:</p>
+<img style="display: block; margin: 0px auto; padding: 15px;" src="https://raw.githubusercontent.com/spring-io/spring-io-static/refs/heads/main/blog/tzolov/20251208/spring-ai-tool-calling-flow.png" width="500" align="left">
+<ol>
+<li><strong>Intercepts the ChatClient request</strong> before it reaches the LLM</li>
+<li><strong>Includes tool definitions</strong> in the prompt sent to the model - for all registered tools!</li>
+<li><strong>Detects tool call requests</strong> in the model's response</li>
+<li><strong>Executes the requested tools</strong> using the <code>ToolCallingManager</code></li>
+<li><strong>Loops back</strong> with tool results until the model provides a final answer</li>
+</ol>
+<p>The tool execution happens in a <strong>recursive loop</strong> - the advisor keeps calling the LLM until no more tool calls are requested.</p>
+<h2 id="the-problem" style="position:relative;"><a href="#the-problem" aria-label="the problem permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>The Problem</h2>
+<p>The standard tool calling flow (such as <code>ToolCallingAdvisor</code>) sends <strong>all tool definitions</strong> to the LLM upfront. This creates three major issues with large tool collections:</p>
+<ul>
+<li><strong>Context bloat</strong> - Massive token consumption before any conversation begins</li>
+<li><strong>Tool confusion</strong> - Models struggle to choose correctly when facing 30+ similar tools</li>
+<li><strong>Higher costs</strong> - Paying for unused tool definitions in every request</li>
+</ul>
+<h2 id="the-tool-search-tool-solution" style="position:relative;"><a href="#the-tool-search-tool-solution" aria-label="the tool search tool solution permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>The Tool Search Tool Solution</h2>
+<p>By extending Spring AI's <code>ToolCallingAdvisor</code>, we've created a <code>ToolSearchToolCallingAdvisor</code> that implements dynamic tool discovery. It intercepts the tool calling loop to selectively inject tools based on what the model discovers it needs:</p>
+<img style="display: block; margin: auto;" src="https://raw.githubusercontent.com/spring-io/spring-io-static/refs/heads/main/blog/tzolov/20251208/spring-ai-tool-search-tool-calling-flow.png" width="600">
+<p>The flow works as follows:</p>
+<ol>
+<li><strong>Indexing</strong>: At conversation start, all registered tools are indexed in the <code>ToolIndex</code> (but NOT sent to the LLM)</li>
+<li><strong>Initial Request</strong>: Only the <strong>Tool Search Tool (TST)</strong> definition is sent to the LLM - saving context</li>
+<li><strong>Discovery Call</strong>: When the LLM needs capabilities, it calls the TST with a search query</li>
+<li><strong>Search &#x26; Expand</strong>: The <code>ToolIndex</code> finds matching tools (e.g., "Tool XYZ") and their definitions are added to the next request</li>
+<li><strong>Tool Invocation</strong>: The LLM now sees both TST and the discovered tool definitions, and can call the actual tool</li>
+<li><strong>Tool Execution</strong>: The discovered tool is executed and results returned to the LLM</li>
+<li><strong>Response</strong>: The LLM generates the final answer using the tool results</li>
+</ol>
+<p>In code, this looks like this:</p>
+<pre><code class="language-java">var toolSearchAdvisor = ToolSearchToolCallingAdvisor.builder()
+    .toolIndex(new LuceneToolIndex())
+    .maxResults(5)
+    .build();
+
+ChatClient chatClient = chatClientBuilder
+    .defaultTools(new MyTools())  // 100s of tools registered but NOT sent to LLM initially
+    .defaultAdvisors(toolSearchAdvisor) // Activate Tool Search Tool
+    .build();
+</code></pre>
+<h3 id="pluggable-search-strategies" style="position:relative;"><a href="#pluggable-search-strategies" aria-label="pluggable search strategies permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Pluggable Search Strategies</h3>
+<p>The <code>ToolIndex</code> interface abstracts the search implementation, supporting multiple strategies:</p>
+<table>
+<thead>
+<tr>
+<th>Strategy</th>
+<th>Implementation</th>
+<th>Best For</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Semantic</strong></td>
+<td><code>VectorToolIndex</code></td>
+<td>Natural language queries, fuzzy matching</td>
+</tr>
+<tr>
+<td><strong>Keyword</strong></td>
+<td><code>LuceneToolIndex</code></td>
+<td>Exact term matching, known tool names</td>
+</tr>
+<tr>
+<td><strong>Regex</strong></td>
+<td><code>RegexToolIndex</code></td>
+<td>Tool name patterns (<code>get_*_data</code>)</td>
+</tr>
+</tbody>
+</table>
+<h2 id="getting-started" style="position:relative;"><a href="#getting-started" aria-label="getting started permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Getting Started</h2>
+<p>The Tool Search Tool is now part of the core <a href="https://github.com/spring-projects/spring-ai">Spring AI</a> project. The easiest way to get started is the Spring Boot starter, which auto-configures everything from a single property.</p>
+<p><em>The community <a href="https://github.com/spring-ai-community/spring-ai-tool-search-tool/tree/1.0.x">v1.0.x</a> release remains available for Spring AI 1.1.x / Spring Boot 3 compatibility.</em></p>
+<h3 id="spring-boot-auto-configuration-recommended" style="position:relative;"><a href="#spring-boot-auto-configuration-recommended" aria-label="spring boot auto configuration recommended permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Spring Boot Auto-configuration (Recommended)</h3>
+<p>Add the Spring Boot starter, which bundles the advisor, the <code>ToolIndex</code> API, and Apache Lucene:</p>
+<pre><code class="language-xml">&#x3C;dependency>
+    &#x3C;groupId>org.springframework.ai&#x3C;/groupId>
+    &#x3C;artifactId>spring-ai-starter-tool-search-advisor&#x3C;/artifactId>
+&#x3C;/dependency>
+</code></pre>
+<p>Then enable dynamic tool discovery with a single property:</p>
+<pre><code class="language-properties">spring.ai.chat.client.tool-search-advisor.enabled=true
+</code></pre>
+<p>That's it. The auto-configuration replaces the default <code>ToolCallingAdvisor</code> with <code>ToolSearchToolCallingAdvisor</code> and registers a <code>RegexToolIndex</code> by default. No code changes are needed — your existing <code>ChatClient</code> usages will automatically benefit from dynamic tool discovery.</p>
+<p>The <code>tool-index-type</code> property selects the search strategy: <code>regex</code> (default, no extra dependencies), <code>lucene</code> (bundled in the starter), or <code>vector</code> (requires a <code>VectorStore</code> bean). A custom <code>ToolIndex</code> bean always takes precedence over the auto-configured one.</p>
+<p>For the full list of configuration properties see the <a href="https://docs.spring.io/spring-ai/reference/api/tools.html#_spring_boot_auto_configuration">Spring Boot Auto Configuration</a> reference documentation.</p>
+<h3 id="manual-configuration" style="position:relative;"><a href="#manual-configuration" aria-label="manual configuration permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Manual Configuration</h3>
+<p>If you prefer explicit wiring, add the two individual modules and construct the advisor programmatically:</p>
+<pre><code class="language-xml">&#x3C;!-- Tool Search advisor -->
+&#x3C;dependency>
+    &#x3C;groupId>org.springframework.ai&#x3C;/groupId>
+    &#x3C;artifactId>spring-ai-tool-search-advisor&#x3C;/artifactId>
+&#x3C;/dependency>
+
+&#x3C;!-- Tool Index API + implementations (Lucene, Vector, Regex) -->
+&#x3C;dependency>
+    &#x3C;groupId>org.springframework.ai&#x3C;/groupId>
+    &#x3C;artifactId>spring-ai-tool-search-tool&#x3C;/artifactId>
+&#x3C;/dependency>
+</code></pre>
+<p><strong>Example Usage</strong></p>
+<div style="font-size: 0.9em;">
+<pre><code class="language-java">@SpringBootApplication
+public class Application {
+
+    @Bean
+    CommandLineRunner demo(ChatClient.Builder builder) {
+        return args -> {
+            var advisor = ToolSearchToolCallingAdvisor.builder()
+                .toolIndex(new LuceneToolIndex())
+                .build();
+
+            ChatClient chatClient = builder
+                .defaultTools(new MyTools())
+                .defaultAdvisors(advisor)
+                .build();
+
+            var answer = chatClient.prompt("""
+                Help me plan what to wear today in Amsterdam.
+                Please suggest clothing shops that are open right now.
+                """)
+                .advisors(a -> a.param(ChatMemory.CONVERSATION_ID, "my-session-id"))
+                .call().content();
+            
+            System.out.println(answer);
+        };
+    }
+
+    static class MyTools {
+
+		@Tool(description = "Get the weather for a given location at a given time")
+		public String weather(String location, 
+            @ToolParam(description = "YYYY-MM-DDTHH:mm") String atTime) {...}
+
+		@Tool(description = "Get clothing shop names for a given location at a given time")
+		public List&#x3C;String> clothing(String location,
+				@ToolParam(description = "YYYY-MM-DDTHH:mm") String openAtTime) {...}
+
+		@Tool(description = "Current date and time for a given location")
+		public String currentTime(String location) {...}
+        
+        // ... potentially hundreds more tools
+    }
+}
+</code></pre>
+</div>
+<blockquote>
+<p><strong>Note:</strong> The <code>ToolSearchToolCallingAdvisor</code> requires a conversation ID in the advisor params context via <code>ChatMemory.CONVERSATION_ID</code>. This scopes the tool index per session, enabling multi-tenant and multi-turn conversation support. When using the auto-configuration, the session ID key is configurable via <code>spring.ai.chat.client.tool-search-advisor.session-id-key-name</code>.</p>
+</blockquote>
+<p>For the example above, the flow would be:</p>
+<div style="font-size: 0.9em;">
+<ol>
+<li><strong>User Request</strong>: <em>"Help me plan what to wear today in Amsterdam. Please suggest clothing shops that are open right now."</em></li>
+<li><strong>Initialization</strong>: Index all tools: <code>weather</code>, <code>clothing</code>, <code>currentTime</code> (+ potentially 100s more)</li>
+<li><strong>First LLM Call</strong> - LLM sees only <code>toolSearchTool</code>
+<ul>
+<li>LLM calls <code>toolSearchTool(query="current time date")</code> → <code>["currentTime"]</code></li>
+</ul>
+</li>
+<li><strong>Second LLM Call</strong> - LLM sees <code>toolSearchTool</code> + <code>currentTime</code>
+<ul>
+<li>LLM calls <code>currentTime("Amsterdam")</code> → <code>"2025-12-08T11:30"</code></li>
+<li>LLM calls <code>toolSearchTool(query="weather location")</code> → <code>["weather"]</code></li>
+</ul>
+</li>
+<li><strong>Third LLM Call</strong> - LLM sees <code>toolSearchTool</code> + <code>currentTime</code> + <code>weather</code>
+<ul>
+<li>LLM calls <code>weather("Amsterdam")</code> → <code>"Sunny, 15°C"</code></li>
+<li>LLM calls <code>toolSearchTool(query="clothing shops")</code> → <code>["clothing"]</code></li>
+</ul>
+</li>
+<li><strong>Fourth LLM Call</strong> - LLM sees <code>toolSearchTool</code> + <code>currentTime</code> + <code>weather</code> + <code>clothing</code>
+<ul>
+<li>LLM calls <code>clothing("Amsterdam", "2025-12-08T11:30")</code> → <code>["H&#x26;M", "Zara", "Uniqlo"]</code></li>
+</ul>
+</li>
+<li><strong>Final Response</strong>: <em>"Based on the sunny 15°C weather in Amsterdam, I recommend light layers. Here are clothing shops open now: H&#x26;M, Zara, ..."</em></li>
+</ol>
+</div>
+<h2 id="performance-measurements" style="position:relative;"><a href="#performance-measurements" aria-label="performance measurements permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Performance Measurements</h2>
+<blockquote>
+<p>⚠️ <strong>Disclaimer:</strong> These are preliminary, manual measurements taken after a few runs. They are not averaged across multiple iterations and should be considered illustrative rather than representative.</p>
+</blockquote>
+<p>To quantify the token savings, we ran preliminary benchmarks using the <a href="https://github.com/spring-ai-community/spring-ai-tool-search-tool/tree/1.0.x/examples/tool-search-tool-demo">demo application</a> with the following setup:</p>
+<ul>
+<li>
+<p><strong>Task</strong>: <em>"Help me plan what to wear today in Amsterdam. Please suggest clothing shops that are open right now."</em></p>
+</li>
+<li>
+<p><strong>28 total tools</strong>: 3 relevant tools (<code>weather</code>, <code>clothing</code>, <code>currentTime</code>) + 25 unrelated "dummy" tools, deliberately <strong>not relevant</strong> to the weather/clothing task, demonstrating how the tool search efficiently discovers only the needed tools among many unrelated options.</p>
+</li>
+<li>
+<p><strong>Search strategies</strong>: Lucene (keyword-based) and VectorStore (semantic)</p>
+</li>
+<li>
+<p><strong>Models tested</strong>: Gemini (<code>gemini-3-pro-preview</code>), OpenAI (<code>gpt-5-mini-2025-08-07</code>), Anthropic (<code>claude-sonnet-4-5-20250929</code>)</p>
+</li>
+</ul>
+<p>The measurements are collected using a custom <a href="https://github.com/spring-ai-community/spring-ai-tool-search-tool/blob/1.0.x/examples/tool-search-tool-demo/src/main/java/org/springaicommunity/tool/search/TokenCounterAdvisor.java">TokenCounterAdvisor</a> that tracks and aggregates the token usage.</p>
+<h4 id="results-with-lucene-search" style="position:relative;"><a href="#results-with-lucene-search" aria-label="results with lucene search permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Results with Lucene Search</h4>
+<div style="font-size: 0.8em;">
+<table>
+<thead>
+<tr>
+<th>Model</th>
+<th>Approach</th>
+<th>Total Tokens</th>
+<th>Prompt Tokens</th>
+<th>Completion Tokens</th>
+<th>Requests</th>
+<th><strong>Savings</strong></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Gemini</strong></td>
+<td>With TST</td>
+<td>2,165</td>
+<td>1,412</td>
+<td>231</td>
+<td>4</td>
+<td><strong>60%</strong></td>
+</tr>
+<tr>
+<td></td>
+<td>Without TST</td>
+<td>5,375</td>
+<td>4,800</td>
+<td>176</td>
+<td>3</td>
+<td>—</td>
+</tr>
+<tr>
+<td><strong>OpenAI</strong></td>
+<td>With TST</td>
+<td>4,706</td>
+<td>2,770</td>
+<td>1,936</td>
+<td>5</td>
+<td><strong>34%</strong></td>
+</tr>
+<tr>
+<td></td>
+<td>Without TST</td>
+<td>7,175</td>
+<td>5,765</td>
+<td>1,410</td>
+<td>3</td>
+<td>—</td>
+</tr>
+<tr>
+<td><strong>Anthropic</strong></td>
+<td>With TST</td>
+<td>6,273</td>
+<td>5,638</td>
+<td>635</td>
+<td>5</td>
+<td><strong>64%</strong></td>
+</tr>
+<tr>
+<td></td>
+<td>Without TST</td>
+<td>17,342</td>
+<td>16,752</td>
+<td>590</td>
+<td>4</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+</div>
+<h4 id="results-with-vectorstore-search" style="position:relative;"><a href="#results-with-vectorstore-search" aria-label="results with vectorstore search permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Results with VectorStore Search</h4>
+<div style="font-size: 0.8em;">
+<table>
+<thead>
+<tr>
+<th>Model</th>
+<th>Approach</th>
+<th>Total Tokens</th>
+<th>Prompt Tokens</th>
+<th>Completion Tokens</th>
+<th>Requests</th>
+<th><strong>Savings</strong></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Gemini</strong></td>
+<td>With TST</td>
+<td>2,214</td>
+<td>1,502</td>
+<td>234</td>
+<td>4</td>
+<td><strong>57%</strong></td>
+</tr>
+<tr>
+<td></td>
+<td>Without TST</td>
+<td>5,122</td>
+<td>4,767</td>
+<td>73</td>
+<td>3</td>
+<td>—</td>
+</tr>
+<tr>
+<td><strong>OpenAI</strong></td>
+<td>With TST</td>
+<td>3,697</td>
+<td>2,109</td>
+<td>1,588</td>
+<td>4</td>
+<td><strong>47%</strong></td>
+</tr>
+<tr>
+<td></td>
+<td>Without TST</td>
+<td>6,959</td>
+<td>5,771</td>
+<td>1,188</td>
+<td>3</td>
+<td>—</td>
+</tr>
+<tr>
+<td><strong>Anthropic</strong></td>
+<td>With TST</td>
+<td>6,319</td>
+<td>5,642</td>
+<td>677</td>
+<td>5</td>
+<td><strong>63%</strong></td>
+</tr>
+<tr>
+<td></td>
+<td>Without TST</td>
+<td>17,291</td>
+<td>16,744</td>
+<td>547</td>
+<td>4</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+</div>
+<h4 id="key-observations" style="position:relative;"><a href="#key-observations" aria-label="key observations permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Key Observations</h4>
+<ul>
+<li><strong>Significant token savings across all models</strong>: The Tool Search Tool pattern achieved <strong>34-64% reduction</strong> in total token consumption depending on the model and search strategy.</li>
+<li><strong>Prompt tokens are the key driver</strong>: The savings come primarily from reduced prompt tokens - with TST, only discovered tool definitions are included rather than all 28 tools upfront.</li>
+<li><strong>Trade-off: More requests, fewer tokens</strong>: TST requires 4-5 requests vs 3-4 without, but the total token cost is significantly lower.</li>
+<li><strong>Both search strategies perform similarly</strong>: Lucene and VectorStore produced comparable results, with VectorStore showing slightly better efficiency for OpenAI in this test.</li>
+<li><strong>All models successfully completed the task</strong>: All three models (Gemini, OpenAI, Anthropic) figured out that they needed to call <code>currentTime</code> before invoking the other tools, demonstrating correct reasoning about tool dependencies.</li>
+<li><strong>Different tool discovery strategies</strong>: Models exhibited varying approaches—some managed to request all necessary tools upfront, while others discovered them one by one. However, all models leveraged parallel tool calling when possible to optimize execution.</li>
+<li><strong>Older models may struggle</strong>: The older model versions may have difficulty with the tool search pattern, potentially missing required tools or making suboptimal discovery decisions. Consider adding a custom <code>systemMessageSuffix</code> to provide additional guidance to the model, experiment with different <code>ToolIndex</code> configurations or pair this approach with the <a href="https://spring.io/blog/2025/11/10/spring-ai-llm-as-judge-blog-post">LLM as Judge pattern</a> to ensure reliable and consistent behavior across different models.</li>
+</ul>
+<h2 id="when-to-use" style="position:relative;"><a href="#when-to-use" aria-label="when to use permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>When to Use</h2>
+<table>
+<thead>
+<tr>
+<th>Tool Search Tool Approach</th>
+<th>Traditional Approach</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>20+ tools in your system</td>
+<td>Small tool library (&#x3C;20 tools)</td>
+</tr>
+<tr>
+<td>Tool definitions consuming >5K tokens</td>
+<td>All tools frequently used in every session</td>
+</tr>
+<tr>
+<td>Building MCP-powered systems with multiple servers</td>
+<td>Very compact tool definitions</td>
+</tr>
+<tr>
+<td>Experiencing tool selection accuracy issues</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h2 id="next-steps" style="position:relative;"><a href="#next-steps" aria-label="next steps permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Next Steps</h2>
+<p>As part of Spring AI 2.0.0, the Tool Search Tool is now a first-class feature of the core Spring AI project. You can find the source in the <a href="https://github.com/spring-projects/spring-ai">spring-projects/spring-ai</a> repository.</p>
+<p>Also, you can consider combining the Tool Search Tool with <a href="https://spring.io/blog/2025/11/10/spring-ai-llm-as-judge-blog-post">LLM-as-a-Judge patterns</a> to ensure discovered tools actually fulfill the user's task. A judge model could evaluate whether the dynamically selected tools produced satisfactory results and improve the tool discovery if needed.</p>
+<h2 id="conclusion" style="position:relative;"><a href="#conclusion" aria-label="conclusion permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Conclusion</h2>
+<p>The Tool Search Tool pattern is a step toward scalable AI agents. By combining Anthropic's innovative approach with Spring AI's <strong>portable abstraction</strong>, we can build systems that efficiently manage thousands of tools while maintaining high accuracy <strong>across any LLM provider</strong>.</p>
+<p><strong>The power of Spring AI's recursive advisor architecture</strong> is that it allows us to implement sophisticated tool discovery workflows that work universally - whether you're using OpenAI's GPT models, Anthropic's Claude, local Ollama models, or any other LLM supported by Spring AI. You get the same dynamic tool discovery benefits without being locked into a specific provider's native implementation.</p>
+<h2 id="references" style="position:relative;"><a href="#references" aria-label="references permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>References</h2>
+<ul>
+<li><strong>Anthropic Tool Search Tool Pattern</strong>: <a href="https://www.anthropic.com/engineering/advanced-tool-use">Advanced Tool Use</a></li>
+<li><strong>Spring AI Tool Search Tool</strong>: <a href="https://github.com/spring-projects/spring-ai">spring-projects/spring-ai</a></li>
+<li><strong>Spring AI Tools Documentation</strong>: <a href="https://docs.spring.io/spring-ai/reference/api/tools.html">Tools API Reference</a></li>
+<li><strong>Spring AI Recursive Advisors</strong>: <a href="https://docs.spring.io/spring-ai/reference/api/advisors-recursive.html">Advisors API Reference</a></li>
+<li><strong>Spring AI Recursive Advisors Blog</strong>: <a href="https://spring.io/blog/2025/11/04/spring-ai-recursive-advisors">Spring AI Recursive Advisors</a></li>
+</ul>

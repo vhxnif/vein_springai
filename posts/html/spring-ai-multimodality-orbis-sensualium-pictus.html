@@ -1,0 +1,57 @@
+<p><em><strong>UPDATE</strong> 20.07.2024 : Update Message API hierarchy diagram and update the model names supporting multimodality</em></p>
+<p><em><strong>UPDATE</strong> 02.06.2024 : Add an additional code snippet showing how to use the new ChatClient API.</em></p>
+<p>Humans process knowledge, simultaneously across multiple modes of data inputs. The way we learn, our experiences are all multimodal. We don't have just vision, just audio and just text.</p>
+<p>These foundational principles of learning were articulated by the father of modern education John Amos Comenius, in his work, "Orbis Sensualium Pictus", dating back to 1658.</p>
+<p><img src="https://static.spring.io/blog/contentful/20240923/orbis-sensualium-pictus2.jpg" alt="orbis-sensualium-pictus2"></p>
+<blockquote>
+<p>"All things that are naturally connected ought to be taught in combination"</p>
+</blockquote>
+<p>Contrary to those principles, in the past, our approach to Machine Learning was often focused on specialised models tailored to process a single modality. For instance, we developed audio models for tasks like text-to-speech or speech-to-text, and computer vision models for tasks such as object detection and classification.</p>
+<p>However, a new wave of multimodal large language models starts to emerge. Examples include OpenAI's GPT-4o, Google's Vertex AI Gemini Pro 1.5, Anthropic's Claude3, and open source offerings LLaVA and balklava are able to accept multiple inputs, including text images, audio and video and generate text responses by integrating these inputs.</p>
+<p>The multimodal large language model (LLM) features <strong>enable the models to process and generate text in conjunction with other modalities such as images, audio, or video.</strong></p>
+<h1 id="spring-ai---multimodality" style="position:relative;"><a href="#spring-ai---multimodality" aria-label="spring ai   multimodality permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Spring AI - Multimodality</h1>
+<p>Multimodality refers to a model’s ability to simultaneously understand and process information from various sources, including text, images, audio, and other data formats.</p>
+<p>The Spring AI Message API provides all necessary abstractions to support multimodal LLMs.</p>
+<p><img src="https://static.spring.io/blog/contentful/20240923/spring-ai-message-api.jpg" alt="spring-ai-message-api"></p>
+<p>The UserMessage’s <strong>content</strong> field is used as primarily text inputs, while the, optional, <strong>media</strong> field allows adding one or more additional content of different modalities such as images, audio and video. The MimeType specifies the modality type.
+Depending on the used LLMs the Media's data field can be either encoded raw media content or an URI to the content.</p>
+<p><em><strong>Note:</strong>  The media field is currently applicable only for user input messages, e.g. <code>UserMessage</code>.</em></p>
+<h2 id="example" style="position:relative;"><a href="#example" aria-label="example permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Example</h2>
+<p>Lets for example take the following picture (<em>multimodal.test.png</em>) as an input and ask the LLM to explain what it sees in the picture.</p>
+<p><img src="https://static.spring.io/blog/contentful/20240923/multimodal.test.png" alt="multimodal.test"></p>
+<p>For most multimodal LLMs, the Spring AI code would look something like this:</p>
+<pre><code>byte[] imageData = new ClassPathResource("/multimodal.test.png").getContentAsByteArray();
+
+var userMessage = new UserMessage(
+    "Explain what do you see in this picture?", // text content
+    List.of(new Media(MimeTypeUtils.IMAGE_PNG, imageData))); // image content
+
+ChatResponse response = chatModel.call(new Prompt(List.of(userMessage)));
+</code></pre>
+<p>or with the new fluent <a href="https://docs.spring.io/spring-ai/reference/api/chatclient.html">ChatClient API</a>:</p>
+<pre><code>String response = ChatClient.create(chatModel).prompt()
+	.user(u -> u.text("Explain what do you see on this picture?")
+			.media(MimeTypeUtils.IMAGE_PNG, new  ClassPathResource("/multimodal.test.png")))
+	.call()
+	.content();
+</code></pre>
+<p>and produce a response like:</p>
+<blockquote>
+<p>This is an image of a fruit bowl with a simple design. The bowl is made of metal with curved wire edges that create an open structure, allowing the fruit to be visible from all angles. Inside the bowl, there are two yellow bananas resting on top of what appears to be a red apple. The bananas are slightly overripe, as indicated by the brown spots on their peels. The bowl has a metal ring at the top, likely to serve as a handle for carrying. The bowl is placed on a flat surface with a neutral-colored background that provides a clear view of the fruit inside.</p>
+</blockquote>
+<p>Latest (1.0.0-SANPSHOT and 1.0.0-M1) versions of Spring AI provides multimodal support for the following Chat Clients:</p>
+<ul>
+<li><a href="https://docs.spring.io/spring-ai/reference/1.0-SNAPSHOT/api/chat/openai-chat.html#_multimodal">Open AI - (GPT-4o)</a></li>
+<li><a href="https://docs.spring.io/spring-ai/reference/1.0-SNAPSHOT/api/chat/ollama-chat.html#_multimodal">Ollama - (LLaVa and Baklava models)</a></li>
+<li><a href="https://docs.spring.io/spring-ai/reference/1.0-SNAPSHOT/api/chat/vertexai-gemini-chat.html#_multimodal">Vertex AI Gemini - (gemini-pro-1.5 model)</a></li>
+<li><a href="https://docs.spring.io/spring-ai/reference/1.0-SNAPSHOT/api/chat/anthropic-chat.html#_multimodal">Anthropic Claude 3</a></li>
+<li><a href="https://docs.spring.io/spring-ai/reference/1.0-SNAPSHOT/api/chat/bedrock/bedrock-anthropic3.html#_multimodal">AWS Bedrock Anthropic Claude 3</a></li>
+</ul>
+<h2 id="next-steps" style="position:relative;"><a href="#next-steps" aria-label="next steps permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Next steps</h2>
+<p>Next, the Spring AI will rework the Document API to add multimodality support similar to the Message API.</p>
+<p>Currently the AWS Bedrock <a href="https://docs.spring.io/spring-ai/reference/1.0-SNAPSHOT/api/embeddings/bedrock-titan-embedding.html">Titan EmbeddingClient</a> supports image embeddings.
+It would be required to integrate additional multimodal Embedding services to allow encoding, storing and searching of multimodal content in the Vector Stores.</p>
+<h1 id="conclusion" style="position:relative;"><a href="#conclusion" aria-label="conclusion permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Conclusion</h1>
+<p>Traditionally, machine learning focused on specialised models for singular modalities. However, with innovations like OpenAI's GPT-4 Vision and Google's Vertex AI Gemini, a new era has dawned.</p>
+<p>As we embrace this era of multimodal AI, the vision of interconnected learning envisioned by Comenius becomes a reality.</p>
+<p>Spring AI's Message API facilitates the integration of multimodal LLMs, enabling developers to create innovative solutions. By leveraging these models, applications can comprehend and respond to data in various forms, unlocking new possibilities for AI-driven experiences.</p>

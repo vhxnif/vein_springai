@@ -1,0 +1,55 @@
+<blockquote>
+<p>This blog post is co-authored by our great contributor <a href="https://www.linkedin.com/in/vitalethomas/">Thomas Vitale</a>.</p>
+</blockquote>
+<p><strong>Ollama</strong> now supports all <a href="https://github.com/ggerganov/ggml/blob/master/docs/gguf.md">GGUF</a> models from <strong>Hugging Face</strong>, allowing access to over 45,000 community-created models through <a href="https://docs.spring.io/spring-ai/reference/api/chat/ollama-chat.html">Spring AI's Ollama</a> integration, runnable locally.</p>
+<p><img src="https://static.spring.io/blog/contentful/20240923/spring-ai-ollama-huggingface-gguf2.svg" alt="spring-ai-ollama-huggingface-gguf2"></p>
+<p>We'll explore using this new feature with Spring AI. The Spring AI Ollama integration can automatically pull unavailable models for both chat completion and embedding models. This is useful when switching models or deploying to new environments.</p>
+<h2 id="setting-up-spring-ai-with-ollama" style="position:relative;"><a href="#setting-up-spring-ai-with-ollama" aria-label="setting up spring ai with ollama permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Setting Up Spring AI with Ollama</h2>
+<p>Install Ollama on your system: <a href="https://ollama.com/download">https://ollama.com/download</a>.</p>
+<p><strong>Tip</strong>: Spring AI also supports <a href="https://docs.spring.io/spring-ai/reference/api/testcontainers.html">running Ollama via Testcontainers</a> or integrating with an external Ollama service via <a href="https://docs.spring.io/spring-ai/reference/api/cloud-bindings.html">Kubernetes Service Bindings</a>.</p>
+<p>Follow the <a href="https://docs.spring.io/spring-ai/reference/getting-started.html#dependency-management">dependency management</a> guide to add the Spring AI BOM and the Spring AI Ollama boot starter to your project's Maven <code>pom.xml</code> file or Gradle <code>build.gradle</code> files.</p>
+<p>Maven:</p>
+<pre><code class="language-xml">&#x3C;dependency>
+   &#x3C;groupId>org.springframework.ai&#x3C;/groupId>
+   &#x3C;artifactId>spring-ai-ollama-spring-boot-starter&#x3C;/artifactId>
+&#x3C;/dependency>
+</code></pre>
+<p>Gradle:</p>
+<pre><code class="language-groovy">implementation 'org.springframework.ai:spring-ai-ollama-spring-boot-starter'
+</code></pre>
+<p>Add the following properties to your <code>application.properties</code> file:</p>
+<pre><code class="language-properties">spring.ai.ollama.chat.options.model=hf.co/bartowski/gemma-2-2b-it-GGUF
+spring.ai.ollama.init.pull-model-strategy=always
+</code></pre>
+<ul>
+<li><strong>spring.ai.ollama.chat.options.model</strong>: Specifies the Hugging Face GGUF model to use using theformat: <code>hf.co/{username}/{repository}</code></li>
+<li><strong>spring.ai.ollama.init.pull-model-strategy=always</strong>: Enables automatic model pulling at startup time. For production, you should pre-download the models to avoid delays: <code>ollama pull hf.co/bartowski/gemma-2-2b-it-GGUF</code>.</li>
+</ul>
+<p><strong>Note</strong>: <a href="https://docs.spring.io/spring-ai/reference/api/chat/ollama-chat.html#auto-pulling-models">Auto-pulling</a> is available in Spring AI 1.0.0-SNAPSHOT and the upcoming M4 release. For M3, pre-download models (<code>ollama pull hf.co/{username}/{repository}</code>).</p>
+<p>You can disable the embedding auto-configuration if not required: <code>spring.ai.ollama.embedding.enabled=false</code>.
+Otherwise, Spring AI will pull the <code>mxbai-embed-large</code> embedding model if not available locally.</p>
+<h2 id="usage-example" style="position:relative;"><a href="#usage-example" aria-label="usage example permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Usage Example</h2>
+<p>Using the configured Hugging Face model with Spring AI is straightforward and not different from using any other Spring AI model provider.
+Here's a simple example:</p>
+<pre><code class="language-java">@Bean
+public CommandLineRunner run(ChatClient.Builder builder) {
+  var chatClient = builder.build();
+  return args -> {
+    var response = chatClient
+        .prompt("Tell me a joke")
+        .call()
+        .content();
+    logger.info("Answer: " + response);
+  };
+}
+</code></pre>
+<h2 id="references" style="position:relative;"><a href="#references" aria-label="references permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>References</h2>
+<ul>
+<li><a href="https://docs.spring.io/spring-ai/reference/api/chat/ollama-chat.html">Spring AI Ollama Chat</a></li>
+<li><a href="https://docs.spring.io/spring-ai/reference/api/embeddings/ollama-embeddings.html">Spring AI Ollama Embedding</a></li>
+<li><a href="https://github.com/tzolov/spring-ai-ollama-huggingface-demo">Companion sample project</a></li>
+</ul>
+<h2 id="conclusion" style="position:relative;"><a href="#conclusion" aria-label="conclusion permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Conclusion</h2>
+<p>The integration of Ollama's support for Hugging Face GGUF models with Spring AI opens up a world of possibilities for developers.</p>
+<p>We encourage you to explore the vast collection of models on Hugging Face and experiment with different models in your Spring AI projects. Whether you're building advanced natural language understanding systems, creative writing tools, or complex analytical applications, Spring AI and Ollama provide the flexibility to easily leverage these powerful models.</p>
+<p>Remember to stay updated with the latest developments in Spring AI and Ollama, as this field is rapidly evolving. Happy coding!</p>

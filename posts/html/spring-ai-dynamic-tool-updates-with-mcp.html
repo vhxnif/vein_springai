@@ -1,0 +1,169 @@
+<p>The Model Context Protocol (MCP) is a powerful feature in Spring AI that enables AI models to access external tools and resources through a standardized interface. One interesting capabilities of MCP is its ability to dynamically update available tools at runtime.</p>
+<p>This blog post explores how Spring AI implements dynamic tool updates in MCP, providing flexibility and extensibility to AI-powered applications.</p>
+<p>The related example code is available here: <a href="https://github.com/spring-projects/spring-ai-examples/tree/main/model-context-protocol/dynamic-tool-update">Dynamic Tool Update Example</a></p>
+<h2 id="understanding-the-model-context-protocol" style="position:relative;"><a href="#understanding-the-model-context-protocol" aria-label="understanding the model context protocol permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Understanding the Model Context Protocol</h2>
+<img style="float: right; display: block; margin: auto;" src="https://raw.githubusercontent.com/spring-io/spring-io-static/refs/heads/main/blog/tzolov/20250504/mcp-tools-notifications.png" width="250">
+<p>Before diving into dynamic tool updates, let's understand what MCP is and why it matters:</p>
+<p><a href="https://modelcontextprotocol.io/introduction">The Model Context Protocol (MCP)</a> is a standardized interface that allows AI applicaitons and Agents to: <strong>Access external tools</strong> , <strong>Retrieve resources</strong> , <strong>Use prompt templates</strong> .</p>
+<p>MCP follows a <a href="https://modelcontextprotocol.io/docs/concepts/architecture">client-server architecture</a>: <strong>MCP Servers</strong> - expose tools, resources, and prompts; <strong>MCP Clients</strong> - connect to servers and use their capabilities; <strong>AI Models</strong> - interact with the world through these clients</p>
+<p>Spring AI provides a comprehensive implementation of MCP with both <a href="https://docs.spring.io/spring-ai/reference/api/mcp/mcp-client-boot-starter-docs.html">client</a> and <a href="https://docs.spring.io/spring-ai/reference/api/mcp/mcp-server-boot-starter-docs.html">server</a> components, making it easy to integrate AI capabilities into Spring applications.</p>
+<h3 id="the-dynamic-tool-update-feature" style="position:relative;"><a href="#the-dynamic-tool-update-feature" aria-label="the dynamic tool update feature permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>The Dynamic Tool Update Feature</h3>
+<p>One powerful aspects of the MCP is the ability to dynamically update the available tools at runtime. This means:</p>
+<ul>
+<li>MCP Servers can add or remove tools without restarting</li>
+<li>MCP Clients can detect these changes</li>
+<li>AI models can immediately use the new capabilities</li>
+</ul>
+<h2 id="how-dynamic-tool-updates-work" style="position:relative;"><a href="#how-dynamic-tool-updates-work" aria-label="how dynamic tool updates work permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>How Dynamic Tool Updates Work</h2>
+<p>The dynamic tool update process involves several components working together:</p>
+<h3 id="server-side-implementation" style="position:relative;"><a href="#server-side-implementation" aria-label="server side implementation permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Server-Side Implementation</h3>
+<p>Spring AI's <code>@Tool</code> annotation makes it easy to expose methods as MCP tools:</p>
+<pre><code class="language-java">public class MathTools {
+
+    @Tool(description = "Adds two numbers")
+    public int sumNumbers(int number1, int number2) {
+        return number1 + number2;
+    }
+
+    // ...
+}
+</code></pre>
+<p>The framework automatically:</p>
+<ol>
+<li>Extracts method parameters as tool inputs</li>
+<li>Generates appropriate JSON schemas</li>
+<li>Handles parameter validation and conversion</li>
+</ol>
+<p>On the server side, Spring AI's MCP implementation provides a straightforward way to add MCP tools at start time and dynamically at runtime:</p>
+<pre><code class="language-java">@SpringBootApplication
+public class ServerApplication {
+
+    //1. Tools added at start time by the Spring AI MCP Server Boot starter
+    @Bean
+    public ToolCallbackProvider weatherTools(WeatherService weatherService) {
+        return MethodToolCallbackProvider.builder().toolObjects(weatherService).build();
+    }
+
+    //2. Runtime tool addition
+    @Bean
+    public CommandLineRunner commandRunner(McpSyncServer mcpSyncServer) {
+        return args -> {
+
+            // Wait for some tool update signal
+
+            // Add math tools dynamically
+            List&#x3C;SyncToolSpecification> newTools = McpToolUtils
+                    .toSyncToolSpecifications(ToolCallbacks.from(new MathTools()));
+
+            for (SyncToolSpecification newTool : newTools) {
+				mcpSyncServer.addTool(newTool);
+			}
+        };
+    }
+}
+</code></pre>
+<p>In this example:</p>
+<ol>
+<li>The server initially exposes only weather forecast tools</li>
+<li>When a custom tool-update signal is received the <code>McpSyncServer.addTool()</code> method is used to dynamically register new tools</li>
+</ol>
+<p>The <code>McpSyncServer</code> class provides methods for tool management:</p>
+<ul>
+<li><code>addTool(SyncToolSpecification)</code> - Adds a new tool</li>
+<li><code>removeTool(String)</code> - Removes a tool by name</li>
+<li><code>notifyToolsListChanged()</code> - Notifies clients about tool changes</li>
+</ul>
+<blockquote>
+<p><strong>NOTE:</strong> you can add and/or remove Tools only after the Clinet/Server connection has been initialized.</p>
+</blockquote>
+<h3 id="client-side-implementation" style="position:relative;"><a href="#client-side-implementation" aria-label="client side implementation permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Client-Side Implementation</h3>
+<p>The MCP protocol includes a notification system that allows servers to inform clients about changes to available tools. This notification system ensures that clients always have an up-to-date view of the server's capabilities.</p>
+<p>On the client side, Spring AI provides mechanisms to detect and react to tool changes:</p>
+<pre><code class="language-java">@Bean
+McpSyncClientCustomizer customizeMcpClient() {
+    return (name, mcpClientSpec) -> {
+        mcpClientSpec.toolsChangeConsumer(tv -> {
+            logger.info("\nMCP TOOLS CHANGE: " + tv);
+            latch.countDown();
+        });
+    };
+}
+</code></pre>
+<p>The client registers a listener that is invoked whenever the server's available tools change. This allows the client to:</p>
+<ol>
+<li>Be notified when tools are added or removed</li>
+<li>Update its internal state accordingly</li>
+<li>Make the new tools immediately available to the AI model</li>
+</ol>
+<p>Currently Spring AI doesn't maintain internal state about the updated tools, but you can use the customization listener to implement smart tool caching or similar.</p>
+<h3 id="tool-discovery-and-usage" style="position:relative;"><a href="#tool-discovery-and-usage" aria-label="tool discovery and usage permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Tool Discovery and Usage</h3>
+<p>The client can discover available tools at any time:</p>
+<pre><code class="language-java">List&#x3C;ToolDescription> toolDescriptions = chatClientBuilder.build()
+        .prompt("What tools are available?")
+        .toolCallbacks(tools)
+        .call()
+        .entity(new ParameterizedTypeReference&#x3C;List&#x3C;ToolDescription>>() {});
+</code></pre>
+<p>A key insight from the Spring AI MCP implementation is:</p>
+<blockquote>
+<p><strong>TIP</strong>: The client implementation relies on the fact that the <a href="https://github.com/spring-projects/spring-ai/blob/9e71b163e315199fe7b46495d87a0828a807b88f/mcp/common/src/main/java/org/springframework/ai/mcp/SyncMcpToolCallbackProvider.java#L132">ToolCallbackProvider#getToolCallbacks</a> implementation for MCP will always retrieves the current list of MCP tools from the server.</p>
+</blockquote>
+<p>This means that whenever a client requests the available tools, it will always get the most up-to-date list from the server, without needing to restart or reinitialize the client.</p>
+<h2 id="practical-applications" style="position:relative;"><a href="#practical-applications" aria-label="practical applications permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Practical Applications</h2>
+<p>Dynamic tool updates in MCP enable several powerful use cases:</p>
+<h3 id="1-feature-flags-for-ai-capabilities" style="position:relative;"><a href="#1-feature-flags-for-ai-capabilities" aria-label="1 feature flags for ai capabilities permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>1. Feature Flags for AI Capabilities</h3>
+<p>You can implement feature flags that control which AI capabilities are available:</p>
+<pre><code class="language-java">if (featureFlags.isEnabled("advanced-math")) {
+    mcpSyncServer.addTool(advancedMathTools);
+}
+</code></pre>
+<h3 id="2-context-aware-tool-loading" style="position:relative;"><a href="#2-context-aware-tool-loading" aria-label="2 context aware tool loading permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>2. Context-Aware Tool Loading</h3>
+<p>Load tools based on the current context or user permissions:</p>
+<pre><code class="language-java">if (userHasPermission(currentUser, "admin-tools")) {
+    mcpSyncServer.addTool(adminTools);
+}
+</code></pre>
+<h3 id="3-progressive-enhancement" style="position:relative;"><a href="#3-progressive-enhancement" aria-label="3 progressive enhancement permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>3. Progressive Enhancement</h3>
+<p>Start with basic tools and add more advanced capabilities as needed:</p>
+<pre><code class="language-java">// Start with basic tools
+mcpSyncServer.addTool(basicTools);
+
+// Add advanced tools when the user reaches a certain level
+userService.onUserLevelUp(user -> {
+    if (user.getLevel() >= 5) {
+        mcpSyncServer.addTool(advancedTools);
+    }
+});
+</code></pre>
+<h3 id="4-dynamic-plugin-architecture" style="position:relative;"><a href="#4-dynamic-plugin-architecture" aria-label="4 dynamic plugin architecture permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>4. Dynamic Plugin Architecture</h3>
+<p>Implement a plugin system where new capabilities can be added at runtime:</p>
+<pre><code class="language-java">pluginRegistry.onPluginLoaded(plugin -> {
+    if (plugin.hasMcpTools()) {
+        mcpSyncServer.addTool(plugin.getMcpTools());
+    }
+});
+</code></pre>
+<h2 id="conclusion" style="position:relative;"><a href="#conclusion" aria-label="conclusion permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Conclusion</h2>
+<p>Spring AI's handling of dynamic tool updates in the Model Context Protocol provides a mechanism for extending AI capabilities at runtime. This feature enables more flexible, extensible, and resource-efficient AI applications.</p>
+<p>Key takeaways:</p>
+<ol>
+<li>
+<p><strong>Standardized Interface</strong>: MCP provides a consistent way for AI models to interact with external tools and resources.</p>
+</li>
+<li>
+<p><strong>Dynamic Updates</strong>: Tools can be added or removed at runtime without requiring application restarts.</p>
+</li>
+<li>
+<p><strong>Automatic Discovery</strong>: Clients can detect changes to available tools and make them immediately available to AI models.</p>
+</li>
+<li>
+<p><strong>Simple API</strong>: Spring AI provides a clean, annotation-based API for defining and managing MCP tools.</p>
+</li>
+</ol>
+<p>By leveraging dynamic tool updates in Spring AI's MCP implementation, developers can create more adaptable AI applications that can evolve their capabilities based on runtime conditions, user needs, and system requirements.</p>
+<h2 id="resources" style="position:relative;"><a href="#resources" aria-label="resources permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Resources</h2>
+<ul>
+<li><a href="https://docs.spring.io/spring-ai/reference/">Spring AI Documentation</a></li>
+<li><a href="http://localhost:3000/specification/2024-11-05/server/tools">Model Context Protocol Tools Specification</a></li>
+<li><a href="https://github.com/spring-projects/spring-ai-examples">Spring AI Examples Repository</a></li>
+</ul>

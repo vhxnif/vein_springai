@@ -1,0 +1,275 @@
+<p><em>A New Session API for Spring AI — Structured, Compactable, Multi-Agent-Ready</em></p>
+<p><strong>Part 7 of the <a href="https://spring.io/blog/2026/04/07/spring-ai-agentic-patterns-6-memory-tools">Spring AI Agentic Patterns</a> series</strong> completes the memory picture. After covering <a href="https://spring.io/blog/2026/01/13/spring-ai-generic-agent-skills">Agent Skills</a>, <a href="https://spring.io/blog/2026/01/16/spring-ai-ask-user-question-tool">AskUserQuestionTool</a>, <a href="https://spring.io/blog/2026/01/20/spring-ai-agentic-patterns-3-todowrite/">TodoWriteTool</a>, <a href="https://spring.io/blog/2026/01/27/spring-ai-agentic-patterns-4-task-subagents">Subagent Orchestration</a>, <a href="https://spring.io/blog/2026/01/29/spring-ai-agentic-patterns-a2a-integration">A2A Integration</a>, and <a href="https://spring.io/blog/2026/04/07/spring-ai-agentic-patterns-6-memory-tools">AutoMemoryTools</a> for long-term cross-session memory, we now add the complementary <strong>short-term layer</strong>: Spring AI Session. Storing conversation history as a flat message list works for short exchanges but breaks down as sessions grow — naive truncation silently discards tool-call sequences mid-exchange, leaving the model with orphaned results and broken turn structure. Spring AI Session solves this by automatically recording every message, tool call, and result for the active exchange and managing the context window intelligently, while <code>AutoMemoryTools</code> retains curated facts that must survive beyond the session. A complete agent memory stack needs both; neither replaces the other.</p>
+<blockquote>
+<p><strong>Roadmap:</strong> Incubating in <a href="https://github.com/spring-ai-community/spring-ai-session">spring-ai-community</a>; targets Spring AI 2.1 (November 2026), when <code>ChatMemory</code> will be deprecated in its favour.</p>
+</blockquote>
+<p><code>ChatMemory</code> evicts the oldest messages with no turn safety, no event identity, no multi-agent support, and no record of what was discarded. Spring AI Session replaces it with an event-sourced log, pluggable compaction strategies, branch isolation, and keyword-searchable recall storage.</p>
+<p>🚀 <strong>Want to jump right in?</strong> Skip to the <a href="#getting-started">Getting Started</a> section.</p>
+<hr>
+<h2 id="session-api-architecture" style="position:relative;"><a href="#session-api-architecture" aria-label="session api architecture permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Session API Architecture</h2>
+<img style="display: block; margin: auto;" src="https://raw.githubusercontent.com/spring-io/spring-io-static/refs/heads/main/blog/tzolov/20260412/session-api-classes.png" width="700" alt="Spring AI Session API Classes">
+<h3 id="session-and-sessionevent" style="position:relative;"><a href="#session-and-sessionevent" aria-label="session and sessionevent permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Session and SessionEvent</h3>
+<p><code>Session</code> is an <strong>immutable metadata-only value object</strong> — it holds the session ID, user ID, TTL, and arbitrary metadata. The event log lives separately in the repository, fetched on demand.</p>
+<p><code>SessionEvent</code> wraps a Spring AI <code>Message</code> and adds what <code>Message</code> intentionally omits: a UUID, <code>sessionId</code>, <code>timestamp</code>, an optional <code>branch</code> label for multi-agent hierarchies, and framework flags like <code>METADATA_SYNTHETIC</code>.</p>
+<pre><code class="language-java">SessionService service = new DefaultSessionService(InMemorySessionRepository.builder().build());
+
+Session session = service.create(
+    CreateSessionRequest.builder().userId("alice").build()
+);
+
+service.appendMessage(session.id(), new UserMessage("What is Spring AI?"));
+service.appendMessage(session.id(), new AssistantMessage("Spring AI is..."));
+
+List&#x3C;Message> history = service.getMessages(session.id()); // ready to pass to an LLM
+</code></pre>
+<h3 id="turns" style="position:relative;"><a href="#turns" aria-label="turns permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Turns</h3>
+<p>A <strong>turn</strong> is the atomic unit of conversation: one <code>UserMessage</code> plus all following events — assistant replies, tool calls, tool results — up to the next <code>UserMessage</code>. All compaction strategies operate at turn granularity, so the kept window always starts on a <code>USER</code> message. The model never sees an orphaned tool result or a split exchange.</p>
+<pre><code>Turn 1: [USER "What is Spring AI?"]  [ASSISTANT "Spring AI is..."]
+Turn 2: [USER "Can it use tools?"]   [ASSISTANT (tool call)]  [TOOL result]  [ASSISTANT "Yes,..."]
+</code></pre>
+<hr>
+<h2 id="context-compaction" style="position:relative;"><a href="#context-compaction" aria-label="context compaction permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Context Compaction</h2>
+<p>Compaction reduces the event history to fit the context window while preserving coherence. It is driven by two composable abstractions: <strong>triggers</strong> and <strong>strategies</strong>.</p>
+<h3 id="triggers" style="position:relative;"><a href="#triggers" aria-label="triggers permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Triggers</h3>
+<pre><code class="language-java">new TurnCountTrigger(20);                                   // fires when > 20 turns
+TokenCountTrigger.builder().threshold(4000).build();        // fires at 4000 estimated tokens
+
+// OR-composite — fires if either condition is met
+CompositeCompactionTrigger.anyOf(
+    new TurnCountTrigger(20),
+    TokenCountTrigger.builder().threshold(4000).build()
+);
+</code></pre>
+<h3 id="strategies" style="position:relative;"><a href="#strategies" aria-label="strategies permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Strategies</h3>
+<table>
+<thead>
+<tr>
+<th>Strategy</th>
+<th>LLM call?</th>
+<th>Best for</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>SlidingWindowCompactionStrategy</code></td>
+<td>No</td>
+<td>Cost-sensitive, short-term context</td>
+</tr>
+<tr>
+<td><code>TurnWindowCompactionStrategy</code></td>
+<td>No</td>
+<td>Turn-structured dialogues</td>
+</tr>
+<tr>
+<td><code>TokenCountCompactionStrategy</code></td>
+<td>No</td>
+<td>Hard context-window limits</td>
+</tr>
+<tr>
+<td><code>RecursiveSummarizationCompactionStrategy</code></td>
+<td>Yes</td>
+<td>Long-running, context-rich sessions</td>
+</tr>
+</tbody>
+</table>
+<p>The first three keep a verbatim suffix of events (by message count, turn count, or token budget). All three snap the cut point to the nearest turn boundary — no partial turns are ever kept.</p>
+<p><strong>Recursive Summarization</strong> is the most powerful: it uses an LLM to summarize the events being archived and stores the result as a synthetic <code>user</code> + <code>assistant</code> turn. Each subsequent compaction pass builds on prior summaries — creating a rolling compressed history that never starts from scratch:</p>
+<pre><code class="language-java">RecursiveSummarizationCompactionStrategy.builder(chatClient)
+    .maxEventsToKeep(10)
+    .overlapSize(2)   // feed 2 events from the active window into the summary prompt
+    .build();
+</code></pre>
+<blockquote>
+<p><strong>Note:</strong> Trigger and strategy must always be configured together — setting one without the other throws <code>IllegalArgumentException</code> at build time. Either set both via <code>.compactionTrigger(...)</code> and <code>.compactionStrategy(...)</code>, or omit both to disable compaction entirely.</p>
+</blockquote>
+<hr>
+<h2 id="chatclient-integration" style="position:relative;"><a href="#chatclient-integration" aria-label="chatclient integration permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>ChatClient Integration</h2>
+<p><code>SessionMemoryAdvisor</code> wires session management into the <code>ChatClient</code> pipeline transparently. On every request it loads history, prepends it to the prompt, appends the new user and assistant messages, and runs compaction if a trigger fires — all without any manual code in the application.</p>
+<pre><code class="language-java">@Bean
+SessionMemoryAdvisor sessionMemoryAdvisor(SessionService sessionService,
+        ChatClient.Builder chatClientBuilder) {
+
+    return SessionMemoryAdvisor.builder(sessionService)
+        .defaultUserId("alice")
+        .compactionTrigger(new TurnCountTrigger(20))
+        .compactionStrategy(
+            RecursiveSummarizationCompactionStrategy.builder(chatClientBuilder.build())
+                .maxEventsToKeep(10)
+                .build()
+        )
+        .build();
+}
+
+@Bean
+ChatClient chatClient(ChatClient.Builder chatClientBuilder, SessionMemoryAdvisor advisor) {
+    return chatClientBuilder.defaultAdvisors(advisor).build();
+}
+</code></pre>
+<p>Pass a session ID at call time via the advisor context:</p>
+<pre><code class="language-java">String response = chatClient.prompt()
+    .user("Hello!")
+    .advisors(a -> a.param(SessionMemoryAdvisor.SESSION_ID_CONTEXT_KEY, "session-abc"))
+    .call()
+    .content();
+</code></pre>
+<p>If no session exists for the given ID, the advisor creates one automatically.</p>
+<hr>
+<h2 id="multi-agent-branch-isolation" style="position:relative;"><a href="#multi-agent-branch-isolation" aria-label="multi agent branch isolation permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Multi-Agent Branch Isolation</h2>
+<p>When an orchestrator fans out to parallel sub-agents, all agents can share the same <code>Session</code> — but each must see only its own events plus its ancestors'. <code>SessionEvent.branch</code> is a dot-separated path that records the producing agent's position in the hierarchy:</p>
+<pre><code>orchestrator        branch = "orch"
+├── researcher      branch = "orch.researcher"
+└── writer          branch = "orch.writer"
+</code></pre>
+<p>Events with <code>branch = null</code> are root-level — visible to every agent. Pass <code>EventFilter.forBranch()</code> to apply isolation automatically inside the advisor:</p>
+<pre><code class="language-java">// Researcher sees: null-branch + "orch" + own "orch.researcher" events
+// Hidden: "orch.writer" (sibling)
+SessionMemoryAdvisor researcherAdvisor = SessionMemoryAdvisor.builder(sessionService)
+    .defaultSessionId(sharedSessionId)
+    .eventFilter(EventFilter.forBranch("orch.researcher"))
+    .build();
+</code></pre>
+<p>Synthetic summary events from <code>RecursiveSummarizationCompactionStrategy</code> always carry <code>branch = null</code>, so compaction summaries remain visible to every agent in the session.</p>
+<hr>
+<h2 id="recall-storage" style="position:relative;"><a href="#recall-storage" aria-label="recall storage permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Recall Storage</h2>
+<p>Compaction improves prompt efficiency, but older events are removed from the active context window. <code>SessionEventTools</code> implements the MemGPT <em>Recall Storage</em> pattern: the full verbatim event log is always retained and searchable by keyword, even after compaction has pruned it from the prompt.</p>
+<pre><code class="language-java">ChatClient client = ChatClient.builder(chatModel)
+    .defaultTools(SessionEventTools.builder(sessionService).build())
+    .defaultAdvisors(advisor)
+    .build();
+</code></pre>
+<p>The <code>conversation_search</code> tool is auto-discovered by Spring AI. When the model needs to recall a prior exchange it calls the tool with a keyword and an optional <code>page</code> index; results come back as chronologically ordered JSON. Synthetic summary events are searchable too — their text is indexed in the recall store.</p>
+<hr>
+<h2 id="jdbc-persistence" style="position:relative;"><a href="#jdbc-persistence" aria-label="jdbc persistence permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>JDBC Persistence</h2>
+<p><code>spring-ai-session-jdbc</code> stores session data in two tables (<code>AI_SESSION</code> and <code>AI_SESSION_EVENT</code>, an append-only event log) with support for PostgreSQL, MySQL, MariaDB, and H2. The Spring Boot starter auto-configures everything:</p>
+<pre><code class="language-xml">&#x3C;dependency>
+    &#x3C;groupId>org.springaicommunity&#x3C;/groupId>
+    &#x3C;artifactId>spring-ai-starter-session-jdbc&#x3C;/artifactId>
+&#x3C;/dependency>
+</code></pre>
+<p>For PostgreSQL or MySQL, enable schema initialisation:</p>
+<pre><code class="language-yaml">spring:
+  ai:
+    session:
+      repository:
+        jdbc:
+          initialize-schema: always
+</code></pre>
+<p>No additional bean declarations are required.</p>
+<hr>
+<h2 id="getting-started" style="position:relative;"><a href="#getting-started" aria-label="getting started permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Getting Started</h2>
+<p><strong>Requirements:</strong> Java 17+, Spring AI <code>2.0.0-M4+</code>, Spring Boot <code>4.0.2+</code></p>
+<p><strong>1. Import the BOM:</strong></p>
+<pre><code class="language-xml">&#x3C;dependencyManagement>
+    &#x3C;dependencies>
+        &#x3C;dependency>
+            &#x3C;groupId>org.springaicommunity&#x3C;/groupId>
+            &#x3C;artifactId>spring-ai-session-bom&#x3C;/artifactId>
+            &#x3C;version>0.2.0&#x3C;/version>
+            &#x3C;type>pom&#x3C;/type>
+            &#x3C;scope>import&#x3C;/scope>
+        &#x3C;/dependency>
+    &#x3C;/dependencies>
+&#x3C;/dependencyManagement>
+</code></pre>
+<p><strong>2. Add a starter</strong> — JDBC for production, or <code>spring-ai-session-management</code> alone for in-memory development:</p>
+<pre><code class="language-xml">&#x3C;dependency>
+    &#x3C;groupId>org.springaicommunity&#x3C;/groupId>
+    &#x3C;artifactId>spring-ai-starter-session-jdbc&#x3C;/artifactId>
+&#x3C;/dependency>
+</code></pre>
+<p><strong>3. Wire the advisor and use it:</strong></p>
+<pre><code class="language-java">@Bean
+SessionMemoryAdvisor sessionMemoryAdvisor(SessionService sessionService) {
+    return SessionMemoryAdvisor.builder(sessionService)
+        .defaultUserId("alice")
+        .compactionTrigger(new TurnCountTrigger(20))
+        .compactionStrategy(SlidingWindowCompactionStrategy.builder().maxEvents(10).build())
+        .build();
+}
+
+@Bean
+ChatClient chatClient(ChatModel chatModel, SessionMemoryAdvisor advisor) {
+    return ChatClient.builder(chatModel).defaultAdvisors(advisor).build();
+}
+</code></pre>
+<pre><code class="language-java">Session session = sessionService.create(
+    CreateSessionRequest.builder().userId("alice").build()
+);
+
+String response = chatClient.prompt()
+    .user("What is Spring AI?")
+    .advisors(a -> a.param(SessionMemoryAdvisor.SESSION_ID_CONTEXT_KEY, session.id()))
+    .call()
+    .content();
+</code></pre>
+<hr>
+<h2 id="from-chatmemory-to-session-api" style="position:relative;"><a href="#from-chatmemory-to-session-api" aria-label="from chatmemory to session api permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>From ChatMemory to Session API</h2>
+<p>The Session API is designed to <strong>replace</strong> <code>ChatMemory</code> as Spring AI's primary conversation persistence abstraction:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th><code>ChatMemory</code></th>
+<th>Spring AI Session</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Storage unit</td>
+<td><code>Message</code> (flat list)</td>
+<td><code>SessionEvent</code> (immutable, timestamped, identified)</td>
+</tr>
+<tr>
+<td>Compaction</td>
+<td>Evict oldest messages</td>
+<td>Four pluggable strategies incl. LLM summarization</td>
+</tr>
+<tr>
+<td>Turn safety</td>
+<td>Not enforced</td>
+<td>All strategies snap to turn boundaries</td>
+</tr>
+<tr>
+<td>Multi-agent</td>
+<td>Not supported</td>
+<td>Branch isolation with dot-separated labels</td>
+</tr>
+<tr>
+<td>Recall search</td>
+<td>Not available</td>
+<td><code>conversation_search</code> tool via <code>SessionEventTools</code></td>
+</tr>
+<tr>
+<td>Concurrency</td>
+<td>Implementation-dependent</td>
+<td>Optimistic CAS write in all implementations</td>
+</tr>
+</tbody>
+</table>
+<p>The equivalent of <code>MessageWindowChatMemory.builder().maxMessages(20).build()</code> is:</p>
+<pre><code class="language-java">SessionMemoryAdvisor.builder(sessionService)
+    .compactionTrigger(new TurnCountTrigger(20))
+    .compactionStrategy(SlidingWindowCompactionStrategy.builder().maxEvents(20).build())
+    .build();
+</code></pre>
+<hr>
+<h2 id="conclusion" style="position:relative;"><a href="#conclusion" aria-label="conclusion permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Conclusion</h2>
+<p>Spring AI Session brings a structured, event-sourced <strong>short-term memory</strong> layer to the Spring AI ecosystem — with turn-safe compaction, LLM-powered summarization, multi-agent branch isolation, and keyword-searchable recall storage. Paired with <code>AutoMemoryTools</code> from <a href="https://spring.io/blog/2026/04/07/spring-ai-agentic-patterns-6-memory-tools">Part 6</a>, you now have both halves of a complete agent memory stack: a durable long-term layer for facts that outlive the session, and a coherent short-term layer for the active conversation. The library is available from the <a href="https://github.com/spring-ai-community/spring-ai-session">spring-ai-community</a> organization.</p>
+<hr>
+<h2 id="resources" style="position:relative;"><a href="#resources" aria-label="resources permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Resources</h2>
+<ul>
+<li><strong>GitHub</strong>: <a href="https://github.com/spring-ai-community/spring-ai-session">spring-ai-community/spring-ai-session</a></li>
+<li><strong>Documentation</strong>: <a href="https://spring-ai-community.github.io/spring-ai-session/">spring-ai-community.github.io/spring-ai-session</a></li>
+<li><strong>Spring AI Reference</strong>: <a href="https://docs.spring.io/spring-ai/reference/">docs.spring.io/spring-ai/reference</a></li>
+<li><strong>ChatMemory API</strong> (current): <a href="https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/chat-memory.html">Chat Memory Reference</a></li>
+</ul>
+<h4 id="agentic-patterns-series" style="position:relative;"><a href="#agentic-patterns-series" aria-label="agentic patterns series permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Agentic Patterns Series</h4>
+<ul>
+<li><strong>Part 1</strong>: <a href="https://spring.io/blog/2026/01/13/spring-ai-generic-agent-skills">Agent Skills</a> — modular, reusable agent capabilities</li>
+<li><strong>Part 2</strong>: <a href="https://spring.io/blog/2026/01/16/spring-ai-ask-user-question-tool">AskUserQuestionTool</a> — interactive agent workflows</li>
+<li><strong>Part 3</strong>: <a href="https://spring.io/blog/2026/01/20/spring-ai-agentic-patterns-3-todowrite/">TodoWriteTool</a> — structured task management</li>
+<li><strong>Part 4</strong>: <a href="https://spring.io/blog/2026/01/27/spring-ai-agentic-patterns-4-task-subagents">Subagent Orchestration</a> — hierarchical multi-agent architectures</li>
+<li><strong>Part 5</strong>: <a href="https://spring.io/blog/2026/01/29/spring-ai-agentic-patterns-a2a-integration">A2A Integration</a> — building interoperable agents</li>
+<li><strong>Part 6</strong>: <a href="https://spring.io/blog/2026/04/07/spring-ai-agentic-patterns-6-memory-tools">AutoMemoryTools</a> — persistent long-term memory across sessions</li>
+<li><strong>Part 7</strong>: Spring AI Session (this post) — structured short-term memory with turn-safe compaction</li>
+</ul>

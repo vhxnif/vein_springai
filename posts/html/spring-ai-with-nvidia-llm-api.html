@@ -1,0 +1,172 @@
+<p>Spring AI now supports <a href="https://docs.api.nvidia.com/nim/reference/llm-apis">NVIDIA's Large Language Model API</a>, offering integration with a wide range of <a href="https://docs.api.nvidia.com/nim/reference/llm-apis#models">models</a>. By leveraging NVIDIA's OpenAI-compatible API, Spring AI allows developers to use NVIDIA's LLMs through the familiar <a href="https://docs.spring.io/spring-ai/reference/api/chat/nvidia-chat.html">Spring AI API</a>.</p>
+<p><img src="https://static.spring.io/blog/contentful/20240923/SpringAI-NVIDIA-API-5.jpg" alt="SpringAI-NVIDIA-API-5"></p>
+<p>We'll explore how to configure and use the Spring AI OpenAI chat client to connect with NVIDIA LLM API.</p>
+<ul>
+<li>The demo application code is available in the <a href="https://github.com/tzolov/nvidia-llm">nvidia-llm</a> GitHub repository.</li>
+<li>The SpringAI / NVIDIA integration <a href="https://docs.spring.io/spring-ai/reference/api/chat/nvidia-chat.html">documentation</a>.</li>
+</ul>
+<h1 id="prerequisite" style="position:relative;"><a href="#prerequisite" aria-label="prerequisite permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Prerequisite</h1>
+<ul>
+<li>Create <a href="https://build.nvidia.com/explore/discover">NVIDIA</a> account with sufficient credits.</li>
+<li>Select your preferred <a href="https://docs.api.nvidia.com/nim/reference/llm-apis#models">LLM model</a> from NVIDIA's offerings. Like the <code>meta/llama-3.1-70b-instruct</code> in the screenshot below.</li>
+<li>From the model's page, obtain the API key for your chosen model.</li>
+</ul>
+<p><img src="https://static.spring.io/blog/contentful/20240923/NVIDIA-API-KEYS.jpg" alt="NVIDIA-API-KEYS"></p>
+<h1 id="dependencies" style="position:relative;"><a href="#dependencies" aria-label="dependencies permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Dependencies</h1>
+<p>To get started, add the Spring AI OpenAI starter to your project.
+For Maven, add this to your pom.xml:</p>
+<pre><code>&#x3C;dependency>
+  &#x3C;groupId>org.springframework.ai&#x3C;/groupId>
+  &#x3C;artifactId>spring-ai-openai-spring-boot-starter&#x3C;/artifactId>
+&#x3C;/dependency>
+</code></pre>
+<p>For Gradle, add this to your build.gradle:</p>
+<pre><code>gradleCopydependencies {
+  implementation 'org.springframework.ai:spring-ai-openai-spring-boot-starter'
+}
+</code></pre>
+<p>Ensure you've added the Spring Milestone and Snapshot repositories and add the <a href="https://docs.spring.io/spring-ai/reference/getting-started.html#dependency-management">Spring AI BOM</a>.</p>
+<h1 id="configuring-spring-ai" style="position:relative;"><a href="#configuring-spring-ai" aria-label="configuring spring ai permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Configuring Spring AI</h1>
+<p>To use NVIDIA LLM API with Spring AI, we need to configure the OpenAI client to point to the NVIDIA LLM API endpoint and use NVIDIA-specific models.</p>
+<p>Add the following environment variables to your project:</p>
+<pre><code>export SPRING_AI_OPENAI_API_KEY=&#x3C;NVIDIA_API_KEY>
+export SPRING_AI_OPENAI_BASE_URL=https://integrate.api.nvidia.com
+export SPRING_AI_OPENAI_CHAT_OPTIONS_MODEL=meta/llama-3.1-70b-instruct
+export SPRING_AI_OPENAI_EMBEDDING_ENABLED=false
+export SPRING_AI_OPENAI_CHAT_OPTIONS_MAX_TOKENS=2048
+</code></pre>
+<p>Alternatively, you can add these to your application.properties file:</p>
+<pre><code>spring.ai.openai.api-key=&#x3C;NVIDIA_API_KEY>
+spring.ai.openai.base-url=https://integrate.api.nvidia.com
+spring.ai.openai.chat.options.model=meta/llama-3.1-70b-instruct
+
+# The NVIDIA LLM API doesn't support embeddings.
+spring.ai.openai.embedding.enabled=false
+# The NVIDIA LLM API requires this parameter to be set explicitly or error will be thrown.
+spring.ai.openai.chat.options.max-tokens=2048
+</code></pre>
+<p>Key points:</p>
+<ul>
+<li>The <code>api-key</code> is set to your NVIDIA API key.</li>
+<li>The <code>base-url</code> is set to NVIDIA's LLM API endpoint: <a href="https://integrate.api.nvidia.com">https://integrate.api.nvidia.com</a></li>
+<li>The <code>model</code> is set to one of the models available on NVIDIA's LLM API.</li>
+<li>The NVIDIA LLM API reuquires the <code>max-tokens</code> to be explicitly set or a server error will be thrown.</li>
+<li>Since the NVIDIA LLM API is LLM only we can disable the embedding endpong: <code>embedding.enabled=false</code>.</li>
+</ul>
+<p>Check the reference documentation for the complete list of <a href="https://docs.spring.io/spring-ai/reference/api/chat/nvidia-chat.html#_chat_properties">configuration properties</a>.</p>
+<h1 id="code-example" style="position:relative;"><a href="#code-example" aria-label="code example permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Code Example</h1>
+<p>Now that we've configured Spring AI to use NVIDIA LLM API, let's look at a simple example of how to use it in your application.</p>
+<pre><code>@RestController
+public class ChatController {
+
+    private final ChatClient chatClient;
+
+	@Autowired
+    public ChatController(ChatClient.Builder builder) {
+      this.chatClient = builder.build();
+    }
+
+    @GetMapping("/ai/generate")
+    public String generate(@RequestParam(value = "message", defaultValue =  "Tell me a joke") String message) {
+      return  chatClient.prompt().user(message).call().content();
+    }
+
+    @GetMapping("/ai/generateStream")
+    public Flux&#x3C;String> generateStream(
+		@RequestParam(value = "message", defaultValue = "Tell me a joke") String message) {
+      return chatClient.prompt().user(message).stream().content();
+    }
+}
+</code></pre>
+<p>In the <a href="https://github.com/tzolov/nvidia-llm/blob/main/src/main/java/com/example/nvidia/ChatController.java">ChatController.java</a> example, we've created a simple REST controller with two endpoints:</p>
+<ul>
+<li><code>/ai/generate</code>: Generates a single response to a given prompt.</li>
+<li><code>/ai/generateStream</code>: Streams the response, which can be useful for longer outputs or real-time interactions.</li>
+</ul>
+<h1 id="toolfunction-calling" style="position:relative;"><a href="#toolfunction-calling" aria-label="toolfunction calling permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Tool/Function Calling</h1>
+<p>NVIDIA LLM API endpoints support tool/function calling when selecting one of the Tool/Function supporting models.</p>
+<p><img src="https://static.spring.io/blog/contentful/20240923/SpringAI-NVIDIA-FuncitonCalling.jpg" alt="SpringAI-NVIDIA-FuncitonCalling"></p>
+<p>You can register custom Java functions with your ChatModel and have the provided LLM model intelligently choose to output a JSON object containing arguments to call one or many of the registered functions.
+This is a powerful technique to connect the LLM capabilities with external tools and APIs.</p>
+<p>Find more about SpringAI/OpenAI <a href="https://docs.spring.io/spring-ai/reference/api/chat/functions/openai-chat-functions.html">Function Calling</a> support.</p>
+<h3 id="tool-example" style="position:relative;"><a href="#tool-example" aria-label="tool example permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Tool Example</h3>
+<p>Here's a simple example of how to use too/function calling with Spring AI:</p>
+<pre><code>@SpringBootApplication
+public class NvidiaLlmApplication {
+
+	public static void main(String[] args) {
+		SpringApplication.run(NvidiaLlmApplication.class, args);
+	}
+
+	@Bean
+	CommandLineRunner runner(ChatClient.Builder chatClientBuilder) {
+		return args -> {
+			var chatClient = chatClientBuilder.build();
+
+			var response = chatClient.prompt()
+				.user("What is the weather in Amsterdam and Paris?")
+				.functions("weatherFunction") // reference by bean name.
+				.call()
+				.content();
+
+			System.out.println(response);
+		};
+	}
+
+	@Bean
+	@Description("Get the weather in location")
+	public Function&#x3C;WeatherRequest, WeatherResponse> weatherFunction() {
+		return new MockWeatherService();
+	}
+
+	public static class MockWeatherService implements Function&#x3C;WeatherRequest, WeatherResponse> {
+
+		public record WeatherRequest(String location, String unit) {}
+		public record WeatherResponse(double temp, String unit) {}
+
+		@Override
+		public WeatherResponse apply(WeatherRequest request) {
+			double temperature = request.location().contains("Amsterdam") ? 20 : 25;
+			return new WeatherResponse(temperature, request.unit);
+		}
+	}
+}
+</code></pre>
+<p>In the <a href="https://github.com/tzolov/nvidia-llm/blob/main/src/main/java/com/example/nvidia/NvidiaLlmApplication.java">NvidiaLlmApplication.java</a>  example, when the model needs weather information, it will automatically call the <code>weatherFunction</code> bean, which can then fetch real-time weather data.
+The expected response looks like this:</p>
+<blockquote>
+<p>The weather in Amsterdam is currently 20 degrees Celsius, and the weather in Paris is currently 25 degrees Celsius.</p>
+</blockquote>
+<h1 id="key-considerations" style="position:relative;"><a href="#key-considerations" aria-label="key considerations permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Key Considerations</h1>
+<p>When using NVIDIA LLM API with Spring AI, keep the following points in mind:</p>
+<ul>
+<li><strong>Model Selection</strong>: NVIDIA offers a wide range of models from various providers. Choose the appropriate model for your use case.</li>
+<li><strong>API Compatibility</strong>: The NVIDIA LLM API is designed to be compatible with the OpenAI API, which allows for easy integration with Spring AI.</li>
+<li><strong>Performance</strong>: NVIDIA's LLM API is optimized for high-performance inference. You may notice improved response speeds, especially for larger models.</li>
+<li><strong>Specialized Models</strong>: NVIDIA offers models specialized for different tasks, such as code completion, math problems, and general chat. Select the most appropriate model for your specific needs.</li>
+<li><strong>API Limits</strong>: Be aware of any rate limits or usage quotas associated with your NVIDIA API key.</li>
+</ul>
+<h1 id="references" style="position:relative;"><a href="#references" aria-label="references permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>References</h1>
+<p>For further information check the Spring AI and OpenAI reference documentations.</p>
+<ul>
+<li><a href="https://docs.spring.io/spring-ai/reference/api/chat/nvidia-chat.html">Spring AI NVIDIA Reference docs</a></li>
+<li><a href="https://docs.api.nvidia.com/nim/reference/llm-apis#overview">NVIDIA LLM API</a></li>
+<li><a href="https://github.com/tzolov/nvidia-llm/blob/main/src/main/java/com/example/nvidia/ChatController.java">Spring AI - NVIDIA - Demo</a></li>
+<li>Previous Spring AI blog posts:
+<ul>
+<li><a href="https://spring.io/blog/2024/08/09/spring-ai-embraces-openais-structured-outputs-enhancing-json-response">Spring AI Embraces OpenAI's Structured Outputs: Enhancing JSON Response Reliability</a></li>
+<li><a href="https://spring.io/blog/2024/07/31/spring-ai-with-groq-a-blazingly-fast-ai-inference-engine">Spring AI with Groq - a blazingly fast AI inference engine</a></li>
+<li><a href="https://spring.io/blog/2024/07/26/spring-ai-with-ollama-tool-support">Spring AI with Ollama Tool Support</a></li>
+<li><a href="https://spring.io/blog/2024/05/09/spring-ai-structured-output">Spring AI - Structured Output</a></li>
+<li><a href="https://spring.io/blog/2024/04/19/spring-ai-multimodality-orbis-sensualium-pictus">Spring AI - Multimodality - Orbis Sensualium Pictus</a></li>
+<li><a href="https://spring.io/blog/2024/03/06/function-calling-in-java-and-spring-ai-using-the-latest-mistral-ai-api">Function Calling in Java and Spring AI using the latest Mistral AI API</a></li>
+<li><a href="https://spring.io/blog/2023/02/24/spring-cloud-function-for-azure-function">Spring Cloud Function for Azure Function</a></li>
+</ul>
+</li>
+</ul>
+<h1 id="conclusion" style="position:relative;"><a href="#conclusion" aria-label="conclusion permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Conclusion</h1>
+<p>Integrating NVIDIA LLM API with Spring AI opens up new possibilities for developers looking to leverage high-performance AI models in their Spring applications.
+By repurposing the OpenAI client, Spring AI makes it straightforward to switch between different AI providers, allowing you to choose the best solution for your specific needs.</p>
+<p>As you explore this integration, remember to stay updated with the latest documentation from both Spring AI and NVIDIA LLM API, as features and model availability may evolve over time.</p>
+<p>We encourage you to experiment with different models and compare their performance and outputs to find the best fit for your use case.</p>
+<p>Happy coding, and enjoy the speed and capabilities that NVIDIA LLM API brings to your AI-powered Spring applications!</p>

@@ -1,0 +1,368 @@
+<h1 id="your-first-spring-ai-10-application" style="position:relative;"><a href="#your-first-spring-ai-10-application" aria-label="your first spring ai 10 application permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Your First Spring AI 1.0 Application</h1>
+<p>by Dr. Mark Pollack, Christian Tsolov, and Josh Long</p>
+<p>Hi, Spring fans! Spring AI is <em>live</em> on the Spring Initializr and everywhere fine bytes might be had. Ask your doctor if AI is right for you! It's an amazing time to be a Java and Spring developer. There's never been a better time to be a Java and Spring developer, and this is doubly true in this unique AI moment. You see, 90% of what people talk about when they talk about AI engineering is just integration with models, most of which have HTTP APIs. And most of what these models take is just human-language <code>String</code>s. This is integration code, and what place for these integrations to exist than hanging off the side of your Spring-based workloads? The same workloads who business logic drives your organizations and which guard data that feeds your organization.</p>
+<h2 id="the-pains-and-patterns-of-ai-engineering" style="position:relative;"><a href="#the-pains-and-patterns-of-ai-engineering" aria-label="the pains and patterns of ai engineering permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>the Pains and Patterns of AI Engineering</h2>
+<p>AI is <em>amazing</em>, but it's not <em>perfect</em>. It has issues, as with all technologies! There are a few things to be on the watch for, and when you explore Spring AI, know that you're doing so in terms of the patterns that support you on your journey to production. Let's look at some of them.</p>
+<p><img src="https://raw.githubusercontent.com/spring-io/spring-io-static/refs/heads/main/blog/tzolov/20250520/pp.png" alt="the pains and patterns of AI"></p>
+<p>Chat models are amenable to just about anything, and will follow you down just about any rabbit hole. If you want it to stay focused on a particular mission, give it a <strong>system prompt</strong>.</p>
+<p>Models are stateless. You might find that surprising if you've ever dealt with a model through  ChatGPT or Claude Desktop, because they submit a transcript of everything that's been said on each subsequent request. This transcript reminds the model what's been said. The transcript is <strong>chat memory</strong>.</p>
+<p>Models live in an isolated sandbox. This makes sense! We've all seen the documentary called <em>The Terminator</em> and know what can go wrong with unruly AI. But, they can do amazing things if you give them a bit of control, via <strong>tool calling</strong>.</p>
+<p>Models are pretty darned smart, but they're not omniscient! You can give them data in the body of the request to help better inform their responses. This is called <strong>prompt stuffing</strong>.</p>
+<p>But don't send <em>too much</em> data! Instead, send only that which might be germaine to the query at hand. You can do this by chucking the data into a <strong>vector store</strong>, to support finding records that are similar to one another. Then, do <strong>retrieval augmented generation (RAG)</strong>, whereby you send the subselection of results from the vector store to the model for final analysis.</p>
+<p>Chat models love to chat, even if they're wrong. This can sometimes produce interesting and incorrect results called <em>hallucinations</em>. Use <strong>evaluators</strong> to validate that the response is basically what you intended it to be.</p>
+<h2 id="one-small-step-for-spring-developers-one-giant-leap-for-ai" style="position:relative;"><a href="#one-small-step-for-spring-developers-one-giant-leap-for-ai" aria-label="one small step for spring developers one giant leap for ai permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>One Small Step for Spring Developers, One Giant Leap for AI</h2>
+<p>Spring AI is a huge leap forward, but for Spring developers it'll feel like a  natural next step. It works like any Spring project. It has portable service abstractions allowing you to work consistently and conveniently with any of a number of models. It provides Spring Boot starters, configuration properties, and autoconfiguration. And, Spring AI carries Spring Boot's production-minded ethic forward, supporting vritual threads, GraalVM native images, and observability through Micrometer. It also offers a great developer experience, integrating Spring Boot's DevTools, and provides rich support for Docker Compose and Testcontainers. As with all Spring projects, you can get started on the <a href="https://start.spring.io">Spring Initializr</a>.</p>
+<h2 id="meet-the-dogs" style="position:relative;"><a href="#meet-the-dogs" aria-label="meet the dogs permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Meet the Dogs</h2>
+<p>And that's just what we're going to do! We're going to build an application to support adopting dogs! I'm inspired by a dog that went viral back in 2021. The dog, named <em>Prancer</em>, sounds like he'd be quite the handful! Here's my favorite excerpt from <a href="https://www.facebook.com/tyfanee.fortuna/posts/10219752628710467">the ad</a>:</p>
+<p>"Ok, I’ve tried. I’ve tried for the last several months to post this dog for adoption and make him sound...palatable. The problem is, he’s just not. There’s not a very big market for neurotic, man-hating, animal-hating, children-hating dogs that look like gremlins. But I have to believe there’s someone out there for Prancer, because I am tired and so is my family. Every day we live in the grips of the demonic Chihuahua hellscape he has created in our home."</p>
+<h2 id="the-pre-requisites" style="position:relative;"><a href="#the-pre-requisites" aria-label="the pre requisites permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>The Pre-requisites</h2>
+<p>Sounds like quite a handful! But even spicy dogs deserve loving homes. So let's build a service to unite people with the dogs of their dreams (or nightmares?) Hit the <a href="https://start.spring.io">Spring Initializr</a> and add the following dependencies to your project: <code>PgVector</code>, <code>GraalVM Native Support</code>, <code>Actuator</code>, <code>Data JDBC</code>, <code>JDBC Chat Memory</code>, <code>PostgresML</code>, <code>Devtools</code>, and <code>Web</code>. Choose Java 24 (or later) and Apache Maven as the build tool. (Strictly speaking, there's no reason you could not use Gradle here, but the example will be in terms of Apache Maven) Make sure the artifact is named <code>adoptions</code>.</p>
+<p>Make sure that in  your <code>pom.xml</code>, you've also got: <code>org.springframework.ai</code>:<code>spring-ai-advisors-vector-store</code>.</p>
+<p>Some of these things are familiar. <code>Data JDBC</code> just brings in Spring Data JDBC, which is just an ORM mapper that allows you to talk to a SQL database. <code>Web</code> brings in Spring MVC. <code>Actuator</code> brings in Spring Boot's observability stack, underpinned in part by <a href="https://micrometer.io">Micrometer</a>. <code>Devtools</code> is a development-time concern, allowing you to do live-reloads as you make changes. It'll automatically reload the code each time you do a "Save" operation in Visual Studio Code or Eclipse, and it'll automatically kick in each time you alt-tab away from IntelliJ IDEA. <code>GraalVM Native Support</code> brings in support for the OpenJDK fork, GraalVM, which provides, among other things, an ahead-of-time compiler (AOT) that produces lightweight, lighting fast binaries.</p>
+<p>We said that Spring Data JDBC will make it easy to connect to a SQL database, but which one? In our application, we'll be using PostgreSQL, but not just vanilla PostgresSQL! We're going to load two very important extensions: <code>vector</code> and <code>postgresml</code>. The <code>vector</code> plugin allows PostgresSQL to act as a <em>vector store</em>. You'll need to turn arbitrary (text, image, audio) data into <em>embeddings</em> before they can be persisted. For this, you'll need an embedding model. <code>PostgresML</code> provides that capability here. These concerns are usually orthaganol—it's just very convenient that PostgreSQL can do both chores. A big part of building a Spring AI application is deciding upon which vector store, embedding model, and chat model you will use.</p>
+<p><code>Claude</code> is, of course, the chat model we're going to be using today. To connect to it, you'll need an API key. You can secure one from <a href="https://www.anthropic.com/api">the Anthropic developer portal</a>. Claude is an awesome fit for most enterprise workloads. It is often more polite, stable, and conservative in uncertain or sensitive contexts. This makes it a great choice for enterprise applications. Claude's also great at document comprehension and at following multistep instructions.</p>
+<h2 id="the-database" style="position:relative;"><a href="#the-database" aria-label="the database permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>The Database</h2>
+<p>As I said before, we're going to use PostgreSQL. It's not too difficult to get a Docker image working that supports both <code>vector</code> and <code>postgresml</code>. I've included a file, <code>adoptions/db/run.sh</code>. Run that. It'll launch a Docker image. You'll then need to initialize it with an application user. Run <code>adoptions/db/init.sh</code>.</p>
+<p>Now you're all set.</p>
+<p>Specify your everything to do with your database connectivity in <code>application.properties</code>:</p>
+<pre><code class="language-properties">spring.sql.init.mode=always
+#
+spring.datasource.url=jdbc:postgresql://localhost:5433/postgresml
+spring.datasource.username=myappuser
+spring.datasource.password=mypassword
+#
+spring.ai.postgresml.embedding.create-extension=true
+spring.ai.postgresml.embedding.options.vector-type=pg_vector
+#
+spring.ai.vectorstore.pgvector.dimensions=768
+spring.ai.vectorstore.pgvector.initialize-schema=true
+#
+spring.ai.chat.memory.repository.jdbc.initialize-schema=always
+</code></pre>
+<p>Here we're specifying what kind of vector we want, whether we want Spring AI to initialize the <code>PostgresML</code> extension. We're specifying what dimensions we want for vectors stored in PostgreSQL, and whether we want Spring AI to initialize the schema required to use it as a vector store.</p>
+<p>We also want to install some data (the dogs!) into the database, so we'll tell Spring Boot to run <code>schema.sql</code> and <code>data.sql</code> which creates a table and installs data in the database, respectively.</p>
+<p>We'll need to talk to the just-created <code>dog</code> table, so we've got a Spring Data JDBC entity and repository. Add the following types to the bottom of <code>AdoptionsApplication.java</code>, after the last <code>}</code>.</p>
+<pre><code class="language-java">
+interface DogRepository extends ListCrudRepository&#x3C;Dog, Integer> {
+}
+
+record Dog(@Id int id, String name, String owner, String description ){
+}
+
+</code></pre>
+<h2 id="the-assistant" style="position:relative;"><a href="#the-assistant" aria-label="the assistant permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>The Assistant</h2>
+<p>We're going to field questions from users via our HTTP controller. Here's the skeleton definition:</p>
+<pre><code class="language-java">
+
+@Controller
+@ResponseBody
+class AdoptionsController {
+
+    private final ChatClient ai;
+
+    AdoptionsController (ChatClient.Builder ai  ) {
+        this.ai = ai.build();
+    }
+
+    @GetMapping("/{user}/assistant")
+    String inquire(@PathVariable String user, @RequestParam String question) {
+        return ai
+                .prompt()
+                .user(question)
+                .call()
+                .content();
+    }
+}
+
+</code></pre>
+<p>So, basically, we can ask questions by making HTTP requests to <code>:8080/youruser/assistant</code>. Try it out.</p>
+<pre><code>http :8080/jlong/assistant question=="my name is Josh" 
+</code></pre>
+<p>You should get an effusive response. We're friends, it sounds like!</p>
+<h2 id="chat-memory" style="position:relative;"><a href="#chat-memory" aria-label="chat memory permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Chat Memory</h2>
+<p>Let's put that friendship to the test.</p>
+<pre><code>http :8080/jlong/assistant question=="what's my name?" 
+</code></pre>
+<p>In my run, I was disappointed to learn that Claude had already forgotten about me. It has no memory of me whatsoever! Let's give our model some memory. We'll do this with an advisor, which pre- and post-processes requests to the model, called <code>PromptChatMemoryAdvisor</code>. Add its definition to the <code>AdoptionsApplication</code>.</p>
+<pre><code class="language-java">    @Bean
+    PromptChatMemoryAdvisor promptChatMemoryAdvisor(DataSource dataSource) {
+        var jdbc = JdbcChatMemoryRepository
+                .builder()
+                .dataSource(dataSource)
+                .build();
+
+        var chatMessageWindow = MessageWindowChatMemory
+                .builder()
+                .chatMemoryRepository(jdbc)
+                .build();
+
+        return PromptChatMemoryAdvisor
+                .builder(chatMessageWindow)
+                .build();
+    }
+</code></pre>
+<p>Advisors are like filters or interceptors. They're a great way to add to the body of a request or handle the response in a generic, cross-cutting kind of way. Sort of like Spring's aspect-oriented programming support.</p>
+<p>This advisor will persist the messages for you. In this instance, it'll persist it to our PostgreSQL database, using schema we've already told Spring AI to initialize (<code>spring.ai.chat.memory.repository.jdbc.initialize-schema=always</code>).</p>
+<p>Change the configuration for the <code>ChatClient</code>:</p>
+<pre><code class="language-java">    // ..
+    AdoptionsController (PromptChatMemoryAdvisor promptChatMemoryAdvisor,
+                         ChatClient.Builder ai  ) {
+        this.ai = ai
+                .defaultAdvisors(promptChatMemoryAdvisor)
+                .build();
+    }
+    // ..
+</code></pre>
+<p>In order for the <code>PromptChatMemoryAdvisor</code> to do its work, it needs to some way to correlate the request from you with a given conversation. You can do this by assigning a conversation ID on the request. Modify the <code>inquire</code> method:</p>
+<pre><code class="language-java">
+    @GetMapping("/{user}/assistant")
+    String inquire(@PathVariable String user, @RequestParam String question) {
+        return ai
+                .prompt()
+                .user(question)
+                .advisors(a -> a.param(ChatMemory.CONVERSATION_ID, user)) // new
+                .call()
+                .content();
+
+    }
+
+</code></pre>
+<p>In this instance, we're simply using the path variable from the URL to create distinct conversations. Naturally, a much more suitable approach might be to use the Spring Security authenticated <code>Principal#getName()</code> call, instead. If you have Spring Security installed, you could inject the authenticated principal as a parameter of the controller method.</p>
+<p>Relaunch the program and then re-run the same HTTP interactions, and this time you should find the model remembers you. NB: you can always reset the memory by deleting the data in that particular table.</p>
+<h2 id="system-prompts" style="position:relative;"><a href="#system-prompts" aria-label="system prompts permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>System Prompts</h2>
+<p>Nice! If you just built a quick UI, you'd have—in effect—your own Claude Desktop. Which is not exactly what we want. Remember, we're trying to help people adopt  dog from our fictitious dog adoption agency <em>Pooch Palace</em>. We don't want people doing their homework or getting coding help from our assistant. Let's give out model a mission statement by configuring a system priompt. Change the configuration again:</p>
+<pre><code class="language-java">    // ..
+    AdoptionsController (PromptChatMemoryAdvisor promptChatMemoryAdvisor,
+                         ChatClient.Builder ai  ) {
+        var system = """
+                You are an AI powered assistant to help people adopt a dog from the adoption agency named Pooch Palace with locations in Rio de Janeiro, Mexico City, Seoul, Tokyo, Singapore, New York City, Amsterdam, Paris, Mumbai, New Delhi, Barcelona, London, and San Francisco. Information about the dogs available will be presented below. If there is no information, then return a polite response suggesting we don't have any dogs available.
+                """;
+        this.ai = ai
+                .defaultSystem(system)
+                // ..
+                .build();
+    }
+    // ..
+</code></pre>
+<p>Let's try asking a question more on point:</p>
+<pre><code class="language-shell">http :8080/jlong/assistant question=="do you have any neurotic dogs?"
+</code></pre>
+<p>We're hoping the model will know about our friend <em>Prancer</em>. It will return, alas, that it does not.</p>
+<h2 id="avoid-token-bankruptcy-with-good-observability" style="position:relative;"><a href="#avoid-token-bankruptcy-with-good-observability" aria-label="avoid token bankruptcy with good observability permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Avoid Token Bankruptcy with Good Observability</h2>
+<p>We haven't extended access to our SQL database to the model (yet). We could read all the database in and then just concatenate it all into the body of the request. Conceptually, assuming we have a small enough data set and a large enough token count, that would work. But it's the principle of the thing! Remember, all interactions with the model incur a token <em>cost</em>. This cost may be born in dollars and cents, such as when using hosted multitenant LLMs like Claude, or at the very least its born in complexity (CPU and GPU resource consumption) costs. Either way: we want to reduce those costs, whenever possible.</p>
+<p>You can and should keep an eye on the token consumption thanks to the Spring AI integration with the Actuator module. In your <code>application.properties</code>, add the following:</p>
+<pre><code class="language-properties">management.endpoints.web.exposure.include=*
+management.endpoint.health.show-details=always
+</code></pre>
+<p>Restart the application and then drive some requests to the model. Then navigate to <code>localhost:8080/actuator/metrics</code> in your browser and you should see metrics starting with <code>gen_ai</code>, e.g.: <code>gen_ai.client.token.usage</code>. Get the details about that metric here: <code>localhost:8080/actuator/metrics/gen_ai.client.token.usage</code>. The metrics integration is powered  by the fabulous Micrometer project, which integrates with darn near every time series database under the sun, including Prometheus, Graphite, Netflix Atlas, DataDog, Dynatrace, etc. So, you could also have these metrics published to those TSDBs to help build out that all important single pane of glass experience for operations.</p>
+<h2 id="retrieval-augmented-generation-rag-with-vector-stores" style="position:relative;"><a href="#retrieval-augmented-generation-rag-with-vector-stores" aria-label="retrieval augmented generation rag with vector stores permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Retrieval Augmented Generation (R.A.G.) with Vector Stores</h2>
+<p>Read all the data from the SQL database using the newly minted <code>DogRepository</code> and then write out Spring AI <code>Document</code>s to the <code>VectorStore</code> in the constructor.</p>
+<pre><code class="language-java">    //...
+    AdoptionsController(JdbcClient db,
+                        PromptChatMemoryAdvisor promptChatMemoryAdvisor,
+                        ChatClient.Builder ai,
+                        DogRepository repository,
+                        VectorStore vectorStore) {
+
+        var count = db
+                .sql("select count(*) from vector_store")
+                .query(Integer.class)
+                .single();
+        if (count == 0) {
+            repository.findAll().forEach(dog -> {
+                var dogument = new Document("id: %s, name: %s, description: %s".formatted(
+                        dog.id(), dog.name(), dog.description()
+                ));
+                vectorStore.add(List.of(dogument));
+            });
+        }
+
+        // ... same as before 
+    }
+
+</code></pre>
+<p>There's no particular scheme here. We're writing a <code>Document</code> with some string data. It doesn't matter what's in the string.</p>
+<p>This will use PostgresML behind the scenes to do the work. We must configure a <code>QuestionAnswerAdvisor</code> so that the <code>ChatClient</code> will know to consult the vector store for supporting documents ("doguments"?) the requests before sending the request off to the model for final analysis. Modify the definition of the <code>ChatClient</code> later on in the constructor accordingly:</p>
+<pre><code class="language-java">
+        this.ai = ai
+                // ...
+                .defaultAdvisors(promptChatMemoryAdvisor, 
+                        new QuestionAnswerAdvisor(vectorStore))
+                // ... 
+                .build();
+</code></pre>
+<p>Re-run the request asking about neurotic dogs and you should find that, indeed, there's a neurotic dog who might just be what the dogtor ordered, and his name is Prancer! Nice!</p>
+<h2 id="structured-output" style="position:relative;"><a href="#structured-output" aria-label="structured output permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Structured Output</h2>
+<p>NB: We've been getting the response as a String, but that's no foundation on which to build an abstraction! We need a strongly typed object we can pass around our codebase.  You <em>could</em> have the model map the return data to such a strongly-typed object, if you wanted. Suppose you had the following record:</p>
+<pre><code class="language-java">record DogAdoptionSuggestion(int id,String name, String description) {}
+</code></pre>
+<p>We could use the <code>entity(Class&#x3C;?>)</code> method instead of the <code>content()</code> method:</p>
+<pre><code class="language-java">//
+@GetMapping("/{user}/assistant")
+DogAdoptionSuggestion inquire (...) {
+    return ai
+            .prompt()
+            .user(..) // 
+            .entity(DogAdoptionSuggestion.class);
+}
+</code></pre>
+<p>You'd get a strongly typed object back instead. How? Magic! (I guess.) Anyway, you <em>could</em> do that, but we're going to carry on with our <code>content()</code>, since after all we're building a chatbot.</p>
+<h2 id="local-tool-calling" style="position:relative;"><a href="#local-tool-calling" aria-label="local tool calling permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Local Tool Calling</h2>
+<p>So, we've been reunited with the dog of our dreams! What now? Well, the natural next step for any red-blood human being would be to want to adopt that doggo, surely! But there's scheduling to be done. Let's allow the model to integrate with our patent-pending, class-leading scheduling algorithm by giving it access to <em>tools</em>.</p>
+<p>Add the following type to the bottom of the code page:</p>
+<pre><code class="language-java">
+
+@Component
+class DogAdoptionScheduler {
+
+    @Tool(description = "schedule an appointment to pickup or adopt a " +
+            "dog from a Pooch Palace location")
+    String schedule(int dogId, String dogName) {
+        System.out.println("Scheduling adoption for dog " + dogName);
+        return Instant
+                .now()
+                .plus(3, ChronoUnit.DAYS)
+                .toString();
+    }
+}
+</code></pre>
+<p>This is just a Spring bean like any other. We're announcing that this method has been called, and then returning a date hard-coded to be three days in the future. The important bit is that we've got a method made available for consumption by the model annotated as <code>@Tool</code>s. Importantly, the tools have descriptions in human language prose that are as descriptive as possible. Remember when your mother said, "use your words!" This is what she meant! It'll help you be a better AI engineer (not to mention a better teammate, but that discussion is a totally different <em>Oprah</em> for another day...).</p>
+<p>Make sure to update the <code>ChatClient</code> configuration by pointing it to the tools:</p>
+<pre><code class="language-java">
+
+    AdoptionsController(
+            JdbcClient db,
+            DogAdoptionScheduler scheduler,
+            ChatClient.Builder ai,
+            DogRepository repository,
+            VectorStore vectorStore) {
+        // ... 
+        this.ai = ai
+                .defaultTools(scheduler)
+                // .. 
+                .build();
+    }
+</code></pre>
+<p>Now let's try the two step interaction:</p>
+<pre><code class="language-shell">http :8080/jlong/assistant question=="do you have any neurotic dogs?"
+</code></pre>
+<p>Once it confirms that there's a dog named Prancer, inquire about scheduling a pickup from the New York City location:</p>
+<pre><code class="language-shell">http :8080/jlong/assistant question=="fantastic. when can i schedule an appointment to pickup Prancer from the New York City location?"
+</code></pre>
+<p>You should see the confirmation on the console that the method was called and you should see that the date is three days in the future. Nice.</p>
+<h2 id="model-context-protocol" style="position:relative;"><a href="#model-context-protocol" aria-label="model context protocol permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Model Context Protocol</h2>
+<p>Already, we've opened up a <em>ton</em> of possibilities! Spring AI is a concise and powerful component model, and Claude is a very brilliant chat model, with which we've integrated our data and our tools. Ideally, though, we should be able to consume tools in a uniform fashion, without being coupled so much to a particular programming model. In November 2025, Anthropic released an update to Claude Desktop that featured a new network protocol called Model Context Protocol (MCP). MCP provides a convenient way for the model to benefit from tools regardless of the language in which they were written.  There are two flavors of MCP: STDIO and HTTP streaming over server-sent events (SSE).</p>
+<p>The result has been very positive! Since its launch we've witnessed a Cambrian explosion of new MCP services - . There are countless MCP sercices. There are countless directories of MCP services. And now, we're starting to see a proliferation of directories of directories of new MCP services! And it all redounds to our benefit; each MCP service is a new trick you can teach your model. There are MCP services for Spring Batch, Spring Cloud Config Server, Cloud Foundry, Heroku, AWS, Google Cloud, Azure, Microsoft Office, Github, Adobe, etc. There are MCP services that let you render 3D scenes in Blender3D. There are MCP services which in turn connect any number of other integrations and services, including those in Zapier, for example.</p>
+<p>And now, we're going to add one more to the mix. Let's extract out the scheduling algorithm as an MCP service and reuse it thusly. Hit the <a href="https://start.spring.io">Spring Initializr</a> and select <code>GraalVM Native Support</code>, <code>Web</code> and <code>Model Context Protocol Server</code>. Choose Java 24 (or later) and Apache Maven. Name the project <code>scheduler</code>. Hit <code>Generate</code> and then open the project inside the resulting <code>.zip</code> file in your favorite IDE.</p>
+<p>Cut and paste the <code>DogAdoptionScheduler</code> to the bottom of the new project. Add the following definition to the main class (<code>SchedulerApplication.java</code>):</p>
+<pre><code class="language-java">
+    @Bean
+    MethodToolCallbackProvider methodToolCallbackProvider(DogAdoptionScheduler scheduler) {
+        return MethodToolCallbackProvider
+                .builder()
+                .toolObjects(scheduler)
+                .build();
+    }
+</code></pre>
+<p>Change <code>application.properties</code> to ensure the new service starts on a different port.</p>
+<pre><code class="language-properties"># ... 
+server.port=8081
+</code></pre>
+<p>Start the scheduler. Return to the <code>adoptions</code> module and let's rework it to point instead to this new, remote HTTP-based MCP service.</p>
+<p>Delete all references in the code to the <code>DogAdoptionScheduler</code> . Define a bean of type <code>McpSyncClient</code> in the configuration.</p>
+<pre><code class="language-java">    @Bean
+    McpSyncClient mcpSyncClient() {
+        var mcp = McpClient
+                .sync(HttpClientSseClientTransport.builder("http://localhost:8081").build()).build();
+        mcp.initialize();
+        return mcp;
+    }
+</code></pre>
+<p>Now, in the constructor, specify a tool callback, pointing to this:</p>
+<pre><code class="language-java">
+    AdoptionsController(JdbcClient db,
+                        McpSyncClient mcpSyncClient,
+                        PromptChatMemoryAdvisor promptChatMemoryAdvisor,
+                        ChatClient.Builder ai,
+                        DogRepository repository,
+                        VectorStore vectorStore) {
+        // ... 
+        this.ai = ai
+                // .. 
+                .defaultToolCallbacks(new SyncMcpToolCallbackProvider(mcpSyncClient))
+                // ..
+                .build();
+    }
+</code></pre>
+<p>Restart the process and ask the same two questions again and this time you should see that the MCP service ends up printing out the confirmation of the schedule, and that the proposed date is indeed still three days ahead in the future.</p>
+<p>Claude Desktop has supported configuring MCP services using a <code>.json</code> configuration file since the beginning and to ease interoperability, Spring AI <em>also</em> supports this configuration format. Here's the <code>.json</code> configuration for the GitHub MCP service, for example:</p>
+<pre><code class="language-json">{
+  "mcpServers": {
+    "github": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "-e",
+        "GITHUB_PERSONAL_ACCESS_TOKEN",
+        "ghcr.io/github/github-mcp-server"
+      ],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "...."
+      }
+    }
+  }
+}
+</code></pre>
+<p>NB: you'd need to specify your own GitHub personal access token there. It's a breeze to tell Spring AI to include that MCP definition as a tool. You would only need to add the following to the <code>application.properties</code> file, for example:</p>
+<pre><code class="language-properties">spring.ai.mcp.client.stdio.servers-configuration=classpath:/github-mcp.json
+</code></pre>
+<p>Now, you could ask the assistant to help you with scheduling and then have it write the proposed date to a file in GitHub, all without any intervention. Nice!</p>
+<h2 id="the-chatbox-is-the-new-ux" style="position:relative;"><a href="#the-chatbox-is-the-new-ux" aria-label="the chatbox is the new ux permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>The Chatbox Is the New UX</h2>
+<p>MCP debuted in Claude Desktop, and at the time of its launch it only supported STDIO-based services on the same host. Recently, that's changed. Claude Desktop just added support for HTTP remote MCP services, such as our <code>scheduler</code>. You'll need to upgrade your Anthropic Account as, at least at the time of this writing, it's only available behind a Max plan. (for which I <em>could not wait</em> to pay!) You can repurpose our scheduler service as a tool that you wield directly from Claude Desktop itself. Assuming you have Claude Desktop installed (it works on macOS and Windows as of this writing), you'd go through the following steps to configure the remote integration.</p>
+<p>First, you'll need top open up Claude's <code>Settings</code> screen.</p>
+<p><img src="https://raw.githubusercontent.com/spring-io/spring-io-static/refs/heads/main/blog/tzolov/20250520/1-claude-settings.png" alt="first you&#x27;ll need to open up Claude&#x27;s Settings screen"></p>
+<p>Then, open up the <code>Integrations</code> section of the <code>Settings</code> screen.</p>
+<p><img src="https://raw.githubusercontent.com/spring-io/spring-io-static/refs/heads/main/blog/tzolov/20250520/2-claude-settings-integrations.png" alt="then open up the Integrations section of the Settings screen"></p>
+<p>In order for you to test this service, it'll need to have a publicly available URL. Obviously, there are a ton of places you could run your application (CloudFoundry, AWS, Google Cloud, Azure, etc.), but to make development a little easier, may we recommend <code>ngrok</code>? It'll make your local service(s) available on a dynamic public URL. We had to pay to upgrade to get it to stop showing an interstitial page. It was maybe $8 USD, if memory serves, which isn't  too bad. Run:</p>
+<pre><code class="language-shell">ngrok http 8081
+</code></pre>
+<p>This will set up a tunnel to whatever service is running on port <code>8081</code>, allowing you to access it via a dynamic URL printed to the console.</p>
+<p><img src="https://raw.githubusercontent.com/spring-io/spring-io-static/refs/heads/main/blog/tzolov/20250520/3-ngrok.png" alt="the ngrok dynamic URL"></p>
+<p>Now we need to tell Claude Desktop about the service back in the <code>Integrations</code> section of the <code>Settings</code> page.</p>
+<p><img src="https://raw.githubusercontent.com/spring-io/spring-io-static/refs/heads/main/blog/tzolov/20250520/4-claude-settings-integrations-new-integration.png" alt="then open up the Integrations section of the Settings screen"></p>
+<p>Hit <code>Add</code> and then <code>Connect</code> on the main screen. You should see confirmation of the connection between Claude Desktop and the <code>scheduler</code> service on port 8081 in the <code>ngrok</code> console.</p>
+<p><img src="https://raw.githubusercontent.com/spring-io/spring-io-static/refs/heads/main/blog/tzolov/20250520/5-ngrok-connection.png" alt="you should see confirmation of the connection between Claude Desktop and the scheduler service on port 8081 in the ngrok console"></p>
+<p>Ask Claude Desktop the same question as above: "when can i schedule an appointment to pickup Prancer from the New York City location?" In our run, it also asked us to specify  the ID of the dog, which we did: <code>45</code>. It'll eventually prompt you to permit it to invoke the tool you just gave it:</p>
+<p><img src="https://raw.githubusercontent.com/spring-io/spring-io-static/refs/heads/main/blog/tzolov/20250520/6-confirm-permissions-for-dog-adoption-scheduler.png" alt="confirm permissions for Claude Desktop"></p>
+<p>Oblige it and then off it goes!</p>
+<p><img src="https://raw.githubusercontent.com/spring-io/spring-io-static/refs/heads/main/blog/tzolov/20250520/7-end-to-end-in-claude-desktop.png" alt="confirm permissions for Claude Desktop"></p>
+<p>It should give you a date three days hence. Neat!</p>
+<h2 id="production-worthy-ai" style="position:relative;"><a href="#production-worthy-ai" aria-label="production worthy ai permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Production Worthy AI</h2>
+<p>Now, it’s time to turn our eyes toward production.</p>
+<h3 id="security" style="position:relative;"><a href="#security" aria-label="security permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Security</h3>
+<p>It’s trivial to use Spring Security to lock down this web application. You could use the authenticated <code>Principal#getName</code> to use as the conversation ID too. What about the data stored in the database, like the conversations? Well, you have a few options here. Many databases support encryption at rest as  a passive capability.</p>
+<h3 id="scalability" style="position:relative;"><a href="#scalability" aria-label="scalability permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Scalability</h3>
+<p>We want this code to be scalable. Remember, each time you make an HTTP request to a model (or many relational databases), you’re doing <em>blocking IO</em>. IO that sits on a thread and makes that thread unavailable to any other demand in the system until the IO has completed. This is a waste of a perfectly good thread! Threads aren't meant to just sit idle, waiting. Java 21 gives us <strong>virtual threads</strong>, which - for sufficiently IO bound services - can dramatically improve scalability. That’s why you should (almost?) always set up <code>spring.threads.virtual.enabled=true</code> in the <code>application.properties</code> file.</p>
+<h3 id="graalvm-native-images" style="position:relative;"><a href="#graalvm-native-images" aria-label="graalvm native images permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>GraalVM Native Images</h3>
+<p>GraalVM is an AOT compiler, led by Oracle, that you can consume through the GraalVM Community Edition open source project or through the very powerful (and free) Oracle GraalVM distribution. If you're using <a href="https://sdkman.io">SDKMAN</a>, it's trivial to install either: <code>sdk install java 24-graalce</code> or <code>sdk install java 24-graal</code>. Then, make sure to use one of those JDK distributions, e.g.: <code>sdk use java 24-graal</code> or even make it your default system-wide <code>sdk default java 24-graalce</code>.</p>
+<p>Remember, we configured both of our Spring AI services with <code>GraalVM Native Support</code>, which adds a build plugin which will allow us to create turn this application into an operating system and architecture-specific native binary:</p>
+<pre><code class="language-shell">./mvnw -DskipTests -Pnative native:compile
+</code></pre>
+<p>Stand back. You might even have time enough to get a cup of coffee.. This takes a minute or so on most machines, but once it’s done, you can run the binary with ease.</p>
+<pre><code class="language-shell">./target/scheduler
+</code></pre>
+<p>This program will start up in a fraction of the time that it did on the JVM. On my machine it starts up in less than a tenth of a second. Even better, you should observe that the application takes a very small fraction of the RAM it would've otherwise taken on the JVM. When the application starts up, it prints out its process identifier (PID) towards the top of the logs. Note that then run:</p>
+<pre><code class="language-shell">ps -o rss &#x3C;PID>
+</code></pre>
+<p>The number is measured in kilobytes, do divide by 1,000 to get the number inf megabytes. Whatever number you get, I'm sure you will recognize it as being far lower than what you might've gotten on the JVM.</p>
+<h3 id="docker" style="position:relative;"><a href="#docker" aria-label="docker permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Docker</h3>
+<p>That’s all very well and good, you might day, but I need to get this running on my cloud platform and that means getting it into the shape of a Docker image. Easy!</p>
+<pre><code class="language-shell">./mvnw -DskipTests -Pnative spring-boot:build-image
+</code></pre>
+<p>Stand back. This might take another minute still. When it finishes, you’ll see its printed out the name of the Docker image that’s been generated. You can run it, remembering to override the hosts and ports of things it would've referenced on your host. Interestingly: we’re on macOS, and amazingly, this application when run in a macOS virtual machine emulating Linux, runs even faster—and right from the jump, too!—then it would’ve on macOS directly! Amazing!</p>
+<h3 id="observability" style="position:relative;"><a href="#observability" aria-label="observability permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Observability</h3>
+<p>This application’s so darn good; I’ll bet it’ll make headlines, just like Prancer, in no time. And when that happens, you’d be well advised to keep an eye on your system resources and - importantly - the token count. All requests to an LLM have a cost - at least one of complexity, if not dollars and cents. As we explored earlier, the Spring Boot observability story is ideal here.</p>
+<h2 id="next-steps" style="position:relative;"><a href="#next-steps" aria-label="next steps permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Next Steps</h2>
+<p>You've just built a production-worthy AI application powered by Claude, PostgresSQL, and Spring AI. We hope you'll get started today on the <a href="https://start.spring.io">Spring Initializr</a></p>

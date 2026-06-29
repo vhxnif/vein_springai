@@ -1,0 +1,131 @@
+<img style="display: block; margin: auto;" align="right" src="https://raw.githubusercontent.com/spring-io/spring-io-static/refs/heads/main/blog/tzolov/20260120/agent-todo-write-logo-2.png" width="200">
+<p>Have you ever asked an AI agent to perform a complex multi-step task, only to find it skipped a critical step halfway through? You're not alone.</p>
+<p>Research shows that LLMs struggle with "lost in the middle" failures—forgetting tasks buried in long contexts.
+When your agent juggles file edits, test execution, and documentation updates, important steps can silently disappear.
+One solution, inspired by Claude Code, is to make planning explicit and observable with the help of a dedicated <code>TodoWrite</code> tool.
+The result: agents that never skip steps and workflows you can observe in real-time.</p>
+<p><strong>This is Part 3 of our Spring AI Agentic Patterns series.</strong> We've covered <a href="https://spring.io/blog/2026/01/13/spring-ai-generic-agent-skills">Agent Skills</a> for modular capabilities and <a href="https://spring.io/blog/2026/01/16/spring-ai-ask-user-question-tool">AskUserQuestionTool</a> for interactive workflows. Now we explore how <code>TodoWriteTool</code> brings structured task management to Spring AI agents.</p>
+<p><strong>Ready to dive in?</strong> Skip to the <a href="#getting-started">Getting Started</a> section.</p>
+<h2 id="what-is-todowritetool" style="position:relative;"><a href="#what-is-todowritetool" aria-label="what is todowritetool permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>What Is TodoWriteTool?</h2>
+<p><code>TodoWriteTool</code> is a Spring AI tool that enables LLMs to create, track, and update task lists during execution. Inspired by <a href="https://platform.claude.com/docs/en/agent-sdk/todo-tracking">Claude Code's TodoWrite</a>, it transforms implicit planning into explicit, trackable workflows. The full implementation is available on GitHub: <a href="https://github.com/spring-ai-community/spring-ai-agent-utils/blob/main/spring-ai-agent-utils/src/main/java/org/springaicommunity/agent/tools/TodoWriteTool.java">TodoWriteTool.java</a></p>
+<p>When an agent receives a complex task, such as "Add a dark mode toggle to the settings page and run tests", it uses <code>TodoWriteTool</code> to decompose it before execution:</p>
+<img style="display: block; margin: auto;" src="https://raw.githubusercontent.com/spring-io/spring-io-static/refs/heads/main/blog/tzolov/20260120/todo-write-flow.png" width="800">
+<p>The LLM calls the tool whenever it needs to update the plan—whether creating initial tasks, marking progress, or adding newly discovered work.</p>
+<p>The tool accepts a list of todo items, each with <strong>id</strong>, <strong>content</strong> (what needs to be done), and <strong>status</strong>.
+Each todo item follows a simple lifecycle:</p>
+<img style="display: block; margin: auto;" src="https://raw.githubusercontent.com/spring-io/spring-io-static/refs/heads/main/blog/tzolov/20260120/todo-write-states.png" width="400">
+<p>The tool enforces an important constraint: <strong>only one task can be <code>in_progress</code> at a time</strong>. This forces sequential, focused execution rather than scattered attempts at parallel work.</p>
+<p>Here's what real-time progress looks like during execution:</p>
+<pre><code>Progress: 2/4 tasks completed (50%)
+[✓] Find top 10 Tom Hanks movies
+[✓] Group movies in pairs
+[→] Print inverted titles
+[ ] Final summary
+</code></pre>
+<h3 id="how-the-llm-knows-when-to-use-it" style="position:relative;"><a href="#how-the-llm-knows-when-to-use-it" aria-label="how the llm knows when to use it permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>How the LLM Knows When to Use It</h3>
+<p>The <a href="https://github.com/spring-ai-community/spring-ai-agent-utils/blob/8df9b26bdeb98cccfe65c445dea7611605d80e4c/spring-ai-agent-utils/src/main/java/org/springaicommunity/agent/tools/TodoWriteTool.java#L54-L242">tool description</a> instructs the LLM on when task tracking is appropriate:</p>
+<blockquote>
+<p><em>"Use this tool when a task requires 3 or more distinct steps or actions. Skip when there is only a single, straightforward task that can be completed in less than 3 trivial steps."</em></p>
+</blockquote>
+<p>This self-governing behavior means the agent decides autonomously whether to create a task list based on complexity.</p>
+<p>💡 <strong>Tip:</strong> Additionally, for best results, use a system prompt with detailed task management instructions. The <a href="https://github.com/spring-ai-community/spring-ai-agent-utils/blob/main/spring-ai-agent-utils/src/main/resources/prompt/MAIN_AGENT_SYSTEM_PROMPT_V2.md#task-management">MAIN_AGENT_SYSTEM_PROMPT_V2</a> provides a Claude Code-inspired example.</p>
+<p>⚠️ <strong>Important:</strong> The Todo-Write pattern relies on <a href="https://docs.spring.io/spring-ai/reference/api/chat-memory.html#page-title">Chat Memory</a> to retain the todo list updates and relay them to the LLM. Additionally, enabling the <a href="https://docs.spring.io/spring-ai/reference/api/advisors-recursive.html#_toolcalladvisor">ToolCallAdvisor</a> replaces the built-in ChatModel tool calling and ensures that all tool messages are logged in chat memory. See the full advisors configuration in <a href="#getting-started">Getting Started</a> below.</p>
+<h2 id="getting-started" style="position:relative;"><a href="#getting-started" aria-label="getting started permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Getting Started</h2>
+<h3 id="1-add-the-dependency" style="position:relative;"><a href="#1-add-the-dependency" aria-label="1 add the dependency permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>1. Add the Dependency</h3>
+<pre><code class="language-xml">&#x3C;dependency>
+    &#x3C;groupId>org.springaicommunity&#x3C;/groupId>
+    &#x3C;artifactId>spring-ai-agent-utils&#x3C;/artifactId>
+    &#x3C;version>0.4.0&#x3C;/version>
+&#x3C;/dependency>
+</code></pre>
+<p>ℹ️ <strong>Note:</strong> Requires Spring AI version <code>2.0.0-SNAPSHOT</code> or <code>2.0.0-M2</code> when released.</p>
+<h3 id="2-configure-your-agent" style="position:relative;"><a href="#2-configure-your-agent" aria-label="2 configure your agent permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>2. Configure Your Agent</h3>
+<pre><code class="language-java">ChatClient chatClient = chatClientBuilder
+    .defaultTools(TodoWriteTool.builder().build())
+    .defaultAdvisors(
+        ToolCallAdvisor.builder().conversationHistoryEnabled(false).build(),
+        MessageChatMemoryAdvisor.builder(MessageWindowChatMemory.builder().build()).build())
+    .build();
+
+String response = chatClient.prompt()
+    .user("Find the top 10 Tom Hanks movies, group them in pairs, " +
+          "and print each title reversed. Use TodoWrite to organize your tasks.")
+    .call()
+    .content();
+</code></pre>
+<p>⚠️ <strong>Important:</strong> Setting <code>conversationHistoryEnabled(false)</code> disables the built-in tool-call history in favor of the <code>MessageChatMemoryAdvisor</code>.</p>
+<p>For a complete example with system prompts and additional tools, see the <a href="https://github.com/spring-ai-community/spring-ai-agent-utils/tree/main/examples/todo-demo">todo-demo</a> project.</p>
+<h3 id="3-optional-event-driven-progress-updates" style="position:relative;"><a href="#3-optional-event-driven-progress-updates" aria-label="3 optional event driven progress updates permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>3. (Optional) Event-Driven Progress Updates</h3>
+<p>The tool publishes events that your application can use to update UIs in real-time.
+For example, define a dedicated ApplicationEvent and event listener:</p>
+<pre><code class="language-java">public class TodoUpdateEvent extends ApplicationEvent {
+    private final List&#x3C;TodoItem> todos;
+    public TodoUpdateEvent(Object source, List&#x3C;TodoItem> todos) {
+        super(source);
+        this.todos = todos;
+    }
+    public List&#x3C;TodoItem> getTodos() { return todos; }
+}
+
+@Component
+public class TodoProgressListener {
+
+    @EventListener
+    public void onTodoUpdate(TodoUpdateEvent event) {
+        int completed = (int) event.getTodos().stream().filter(t -> t.status() == Todos.Status.completed).count();
+        int total = event.getTodos().size();
+
+        System.out.printf("\nProgress: %d/%d tasks completed (%.0f%%)\n", completed, total,
+                (completed * 100.0 / total));
+    }
+}
+</code></pre>
+<p>Then add the event publisher in your <code>todoEventHandler</code>:</p>
+<pre><code class="language-java">@Autowired
+ApplicationEventPublisher applicationEventPublisher;
+
+ChatClient chatClient = chatClientBuilder
+    .defaultTools(TodoWriteTool.builder()
+        // Publish todo update events
+        .todoEventHandler(event ->
+            applicationEventPublisher.publishEvent(new TodoUpdateEvent(this, event.todos())))
+        .build())	
+    // ...
+    .build();
+</code></pre>
+<h2 id="conclusion" style="position:relative;"><a href="#conclusion" aria-label="conclusion permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Conclusion</h2>
+<p>TodoWriteTool brings structured task management to Spring AI agents, transforming implicit planning into explicit, observable workflows. By making the agent's plan visible and trackable, you get more reliable execution, better user experience, and easier debugging.</p>
+<p><strong>Key takeaway:</strong> If your agent is dropping steps on complex tasks, add TodoWriteTool. The overhead is minimal; the LLM decides when tracking is needed based on task complexity.</p>
+<p>Combined with <a href="https://spring.io/blog/2026/01/13/spring-ai-generic-agent-skills">Agent Skills</a> for domain knowledge and <a href="https://spring.io/blog/2026/01/16/spring-ai-ask-user-question-tool">AskUserQuestionTool</a> for interactive clarification, TodoWriteTool completes the foundation for building reliable AI agents.</p>
+<p><strong>Next up:</strong> In <a href="https://spring.io/blog/2026/01/27/spring-ai-agentic-patterns-4-task-subagents">Part 4</a>, we explore <strong>Subagent Orchestration</strong> with TaskTool, and in <a href="https://spring.io/blog/2026/01/29/spring-ai-agentic-patterns-a2a-integration">Part 5</a>, the <strong>A2A Integration</strong> for building interoperable agents with the Agent2Agent protocol.</p>
+<h2 id="resources" style="position:relative;"><a href="#resources" aria-label="resources permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Resources</h2>
+<ul>
+<li><strong>GitHub Repository</strong>: <a href="https://github.com/spring-ai-community/spring-ai-agent-utils">spring-ai-agent-utils</a></li>
+<li><strong>TodoWriteTool Documentation</strong>: <a href="https://github.com/spring-ai-community/spring-ai-agent-utils/blob/main/spring-ai-agent-utils/docs/TodoWriteTool.md">TodoWriteTool.md</a></li>
+<li><strong>Example Projects</strong>:
+<ul>
+<li><a href="https://github.com/spring-ai-community/spring-ai-agent-utils/tree/main/examples/todo-demo">todo-demo</a> - Focused TodoWriteTool demonstration</li>
+<li><a href="https://github.com/spring-ai-community/spring-ai-agent-utils/tree/main/examples/code-agent-demo">code-agent-demo</a> - Full toolkit integration</li>
+</ul>
+</li>
+</ul>
+<h4 id="related" style="position:relative;"><a href="#related" aria-label="related permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Related</h4>
+<ul>
+<li><a href="https://platform.claude.com/docs/en/agent-sdk/todo-tracking">Claude Code Todo Tracking</a> - Original inspiration</li>
+<li><a href="https://spring.io/blog/2025/12/11/spring-ai-tool-search-tools-tzolov">Dynamic Tool Discovery</a> - Efficient tool selection</li>
+<li><a href="https://spring.io/blog/2025/12/23/spring-ai-tool-argument-augmenter-tzolov">Tool Argument Augmentation</a> - Capturing LLM reasoning</li>
+</ul>
+<h4 id="series-links" style="position:relative;"><a href="#series-links" aria-label="series links permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Series Links</h4>
+<ul>
+<li><strong>Part 1</strong>: <a href="https://spring.io/blog/2026/01/13/spring-ai-generic-agent-skills">Agent Skills</a> - Modular, reusable capabilities</li>
+<li><strong>Part 2</strong>: <a href="https://spring.io/blog/2026/01/16/spring-ai-ask-user-question-tool">AskUserQuestionTool</a> - Interactive workflows</li>
+<li><strong>Part 3</strong>: TodoWriteTool (this blog) - Structured planning</li>
+<li><strong>Part 4</strong>: <a href="https://spring.io/blog/2026/01/27/spring-ai-agentic-patterns-4-task-subagents">Subagent Orchestration</a> - Hierarchical agent architectures</li>
+<li><strong>Part 5</strong>: <a href="https://spring.io/blog/2026/01/29/spring-ai-agentic-patterns-a2a-integration">A2A Integration</a> - Building interoperable agents with the Agent2Agent protocol</li>
+<li><strong>Part (soon)</strong>: Subagent Extension Framework (coming soon) - Protocol-agnostic agent orchestration</li>
+</ul>
+<h4 id="related-spring-ai-blogs" style="position:relative;"><a href="#related-spring-ai-blogs" aria-label="related spring ai blogs permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Related Spring AI Blogs</h4>
+<ul>
+<li><a href="https://spring.io/blog/2025/12/11/spring-ai-tool-search-tools-tzolov">Dynamic Tool Discovery</a> - Achieve 34-64% token savings</li>
+<li><a href="https://spring.io/blog/2025/12/23/spring-ai-tool-argument-augmenter-tzolov">Tool Argument Augmentation</a> - Capture LLM reasoning during tool execution</li>
+</ul>

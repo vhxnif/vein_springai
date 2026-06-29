@@ -1,0 +1,130 @@
+<p>OpenAI recently <a href="https://openai.com/index/introducing-structured-outputs-in-the-api/">introduced</a> a powerful feature called Structured Outputs, which ensures that AI-generated responses adhere strictly to a predefined JSON schema. This feature significantly improves the reliability and usability of AI-generated content in real-world applications. Today, we're excited to announce that Spring AI (1.0.0-SNAPSHOT) has <a href="https://docs.spring.io/spring-ai/reference/api/chat/openai-chat.html#_structured_outputs">fully integrated support</a> for OpenAI's Structured Outputs, bringing this capability to Java developers in a seamless, Spring-native way.</p>
+<p>Following diagram shows how the new Structured Outputs feature extends the <a href="https://platform.openai.com/docs/api-reference/chat">OpenAI Chat API</a>:</p>
+<p><img src="https://static.spring.io/blog/contentful/20240923/Restored_Spring_AI__2_.jpg" alt="Restored Spring AI (2)"></p>
+<blockquote>
+<p><strong>Note:</strong> Spring AI already provides a powerful, <a href="https://docs.spring.io/spring-ai/reference/api/structured-output-converter.html">Model-agnostic Structured Output</a> utilities that can be use with various AI models including the OpenAI.
+The OpenAI Structured Outputs feature offers an additional, consistent, but a model specific solution, currently available only to the <code>gpt-4o</code>, <code>gpt-4o-mini</code> and later models.</p>
+</blockquote>
+<p>The OpenAI <code>Structured Outputs</code> feature guarantees the AI model will generate responses that conform to a supplied <a href="https://json-schema.org/overview/what-is-jsonschema">JSON Schema</a>. This addresses several common challenges in AI-powered applications: <strong>Type Safety</strong>: No more worrying about missing required keys or invalid enum values; <strong>Explicit Refusals</strong>: Safety-based model refusals become programmatically detectable; <strong>Simplified Prompting</strong>: Achieve consistent formatting without resorting to overly specific prompts.</p>
+<p>Spring AI allows developers to leverage this feature with minimal configuration. Let's explore how you can use it in your Spring applications.</p>
+<h2 id="programmatic-configuration" style="position:relative;"><a href="#programmatic-configuration" aria-label="programmatic configuration permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Programmatic Configuration</h2>
+<p>You can set the response format programmatically with the OpenAiChatOptions builder as shown below:</p>
+<pre><code>String jsonSchema = """
+  {
+      "type": "object",
+      "properties": {
+          "steps": {
+              "type": "array",
+              "items": {
+                  "type": "object",
+                  "properties": {
+                      "explanation": { "type": "string" },
+                      "output": { "type": "string" }
+                  },
+                  "required": ["explanation", "output"],
+                  "additionalProperties": false
+              }
+          },
+          "final_answer": { "type": "string" }
+      },
+      "required": ["steps", "final_answer"],
+      "additionalProperties": false
+  }
+  """;
+
+Prompt prompt = new Prompt("how can I solve 8x + 7 = -23",
+  OpenAiChatOptions.builder()
+      .withModel(ChatModel.GPT_4_O_MINI)
+      .withResponseFormat(new ResponseFormat(ResponseFormat.Type.JSON_SCHEMA, jsonSchema))
+      .build());
+
+ChatResponse response = this.openAiChatModel.call(prompt);
+</code></pre>
+<p><strong>NOTE:</strong> You must adhere to the OpenAI <a href="https://platform.openai.com/docs/guides/structured-outputs/supported-schemas">subset of the JSON Schema</a> language format.</p>
+<h3 id="using-the-beanoutputconverter" style="position:relative;"><a href="#using-the-beanoutputconverter" aria-label="using the beanoutputconverter permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Using the BeanOutputConverter</h3>
+<p>Spring AI provides a convenient <a href="https://docs.spring.io/spring-ai/reference/api/structured-output-converter.html#_bean_output_converter">BeanOutputConverter</a> utility that can automatically generate JSON schemas from your domain objects and convert structured responses into Java instances:</p>
+<pre><code>record MathReasoning(
+  @JsonProperty(required = true, value = "steps") Steps steps,
+  @JsonProperty(required = true, value = "final_answer") String finalAnswer) {
+
+  record Steps(
+    @JsonProperty(required = true, value = "items") Items[] items) {
+
+    record Items(
+      @JsonProperty(required = true, value = "explanation") String explanation,
+      @JsonProperty(required = true, value = "output") String output) {}
+  }
+}
+
+var outputConverter = new BeanOutputConverter&#x3C;>(MathReasoning.class);
+
+var jsonSchema = outputConverter.getJsonSchema();
+
+Prompt prompt = new Prompt("how can I solve 8x + 7 = -23",
+  OpenAiChatOptions.builder()
+      .withModel(ChatModel.GPT_4_O_MINI)
+      .withResponseFormat(new ResponseFormat(ResponseFormat.Type.JSON_SCHEMA, jsonSchema))
+      .build());
+
+ChatResponse response = this.openAiChatModel.call(prompt);
+String content = response.getResult().getOutput().getContent();
+
+MathReasoning mathReasoning = outputConverter.convert(content);
+</code></pre>
+<p><strong>NOTE:</strong> Ensure you use the <code>@JsonProperty(required = true,…​)</code> annotation.
+This is crucial for generating a schema that accurately marks fields as required. OpenAI <a href="https://platform.openai.com/docs/guides/structured-outputs/all-fields-must-be-required">mandates</a> it for the structured response to function correctly.</p>
+<h2 id="configuring-via-application-properties" style="position:relative;"><a href="#configuring-via-application-properties" aria-label="configuring via application properties permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Configuring via Application Properties</h2>
+<p>Alternatively, when using the <a href="https://docs.spring.io/spring-ai/reference/api/chat/openai-chat.html#_auto_configuration">OpenAI auto-configuration</a>, you can configure the desired response format through the following <a href="https://docs.spring.io/spring-ai/reference/api/chat/openai-chat.html#_chat_properties">chat application properties</a>:</p>
+<pre><code>spring.ai.openai.api-key=YOUR_API_KEY
+spring.ai.openai.chat.options.model=gpt-4o-mini
+
+spring.ai.openai.chat.options.response-format.type=JSON_SCHEMA
+spring.ai.openai.chat.options.response-format.name=MySchemaName
+spring.ai.openai.chat.options.response-format.schema={"type":"object","properties":{"steps":{"type":"array","items":{"type":"object","properties":{"explanation":{"type":"string"},"output":{"type":"string"}},"required":["explanation","output"],"additionalProperties":false}},"final_answer":{"type":"string"}},"required":["steps","final_answer"],"additionalProperties":false}
+spring.ai.openai.chat.options.response-format.strict=true
+</code></pre>
+<h1 id="refusal-response" style="position:relative;"><a href="#refusal-response" aria-label="refusal response permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Refusal Response</h1>
+<p>When using Structured Outputs, OpenAI models may occasionally refuse to fulfill the request for safety reasons. Since a refusal does not necessarily follow the schema you have supplied in response_format, the API response includes a new field called <code>refusal</code> to indicate that the model refused to fulfill the request.</p>
+<p>Spring AI maps this refusal field to the <a href="https://github.com/spring-projects/spring-ai/blob/main/spring-ai-core/src/main/java/org/springframework/ai/chat/messages/AssistantMessage.java#L34">AssistantMessage</a>'s metadata. Search by <code>refusal</code> key.</p>
+<h1 id="future-work" style="position:relative;"><a href="#future-work" aria-label="future work permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Future work</h1>
+<p>We are exploring the possibilities to integrate the new OpenAI specific Structured Outputs features into Spring AI's Model-agnostic Structured Output utility set.</p>
+<h1 id="references" style="position:relative;"><a href="#references" aria-label="references permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>References</h1>
+<p>For further information check the Spring AI and OpenAI reference documentations.</p>
+<ul>
+<li>
+<p><a href="https://docs.spring.io/spring-ai/reference/api/chat/openai-chat.html#_structured_outputs">Spring AI OpenAI Structured Outputs</a></p>
+</li>
+<li>
+<p><a href="https://docs.spring.io/spring-ai/reference/api/structured-output-converter.html">Spring AI, model-agnostic Structured Output converter</a></p>
+</li>
+<li>
+<p><a href="https://spring.io/blog/2024/05/09/spring-ai-structured-output">Spring AI - Structured Output</a> (blog)</p>
+</li>
+<li>
+<p><a href="https://platform.openai.com/docs/guides/structured-outputs">OpenAI Structured Outputs</a></p>
+</li>
+<li>
+<p>Spring AI Blogs:</p>
+<ul>
+<li><a href="https://spring.io/blog/2024/07/31/spring-ai-with-groq-a-blazingly-fast-ai-inference-engine">Spring AI with Groq - a blazingly fast AI inference engine</a></li>
+<li><a href="https://spring.io/blog/2024/07/26/spring-ai-with-ollama-tool-support">Spring AI with Ollama Tool Support</a></li>
+<li><a href="https://spring.io/blog/2024/05/09/spring-ai-structured-output">Spring AI - Structured Output</a></li>
+<li><a href="https://spring.io/blog/2024/04/19/spring-ai-multimodality-orbis-sensualium-pictus">Spring AI - Multimodality - Orbis Sensualium Pictus</a></li>
+<li><a href="https://spring.io/blog/2024/03/06/function-calling-in-java-and-spring-ai-using-the-latest-mistral-ai-api">Function Calling in Java and Spring AI using the latest Mistral AI API</a></li>
+<li><a href="https://spring.io/blog/2023/02/24/spring-cloud-function-for-azure-function">Spring Cloud Function for Azure Function</a></li>
+</ul>
+</li>
+</ul>
+<h1 id="conclusion" style="position:relative;"><a href="#conclusion" aria-label="conclusion permalink" class="anchor before"><svg aria-hidden="true" focusable="false" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Conclusion</h1>
+<p>Spring AI's support for OpenAI's Structured Outputs feature makes the AI-powered applications more reliable and easier to develop.
+By ensuring type safety and consistent, structured formatting, developers can focus on building innovative features rather than wrestling with unpredictable AI outputs.</p>
+<p>We can highlight the following benefits for Spring Developers:</p>
+<ul>
+<li><strong>Seamless Integration</strong>: Leverage Structured Outputs without leaving the Spring ecosystem.</li>
+<li><strong>Type Safety</strong>: Work with strongly-typed Java objects, reducing runtime errors.</li>
+<li><strong>Flexibility</strong>: Choose between programmatic and property-based configuration.</li>
+<li><strong>Domain-Driven Design</strong>: Use your domain objects to define the expected AI output structure.</li>
+</ul>
+<p>Please explore this new capability and share your experiences.
+As always, we welcome feedback and contributions to help improve Spring AI and make it even more powerful and user-friendly.</p>
+<p>Stay tuned for more updates as we continue to enhance Spring AI's integration with cutting-edge AI technologies!</p>
