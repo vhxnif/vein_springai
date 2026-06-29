@@ -1,0 +1,10 @@
+{
+  "$schema": "./config.schema.json",
+  "name": "vein_springai",
+  "db": ".vein/data.db",
+  "model": {
+    "provider": "opencode-go",
+    "model": "deepseek-v4-pro"
+  },
+  "thinkingLevel": "high"
+}
