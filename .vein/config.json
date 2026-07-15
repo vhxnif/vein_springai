@@ -4,7 +4,7 @@
   "db": ".vein/data.db",
   "model": {
     "provider": "opencode-go",
-    "model": "deepseek-v4-pro"
+    "model": "deepseek-v4-flash"
   },
   "thinkingLevel": "high"
 }
