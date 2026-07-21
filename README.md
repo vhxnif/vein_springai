@@ -13,7 +13,7 @@ vein project --connect /path/to/vein_springai
 | 目录 | 说明 | 数量 |
 |------|------|------|
 | `springai2.0/` | Spring AI 2.0 参考文档 | 106 篇 |
-| `posts/` | Spring Blog 文章（Spring AI 主题） | 50 篇 |
+| `posts/` | Spring Blog 文章（Spring AI 主题） | 44 篇 |
 
 ## 更新
 
@@ -22,5 +22,6 @@ vein project --connect /path/to/vein_springai
 ./download_springai_docs.sh
 
 # 更新 Spring Blog 文章
-# 使用 springblog skill
+# 使用 springblog skill，输出到 posts/ 目录
+bash .agents/skills/springblog/download_spring_blogs.sh "Spring AI" engineering posts
 ```

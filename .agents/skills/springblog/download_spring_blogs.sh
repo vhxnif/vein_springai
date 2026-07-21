@@ -9,15 +9,19 @@ set -euo pipefail
 SKILL_DIR="$(cd "$(dirname "$0")" && pwd)"
 KEYWORD="${1:-}"
 CATEGORY="${2:-engineering}"
+OUTDIR="${3:-}"
 
 if [ -z "$KEYWORD" ]; then
-  echo "Usage: $0 <keyword> [category]"
+  echo "Usage: $0 <keyword> [category] [output-dir]"
   echo "Example: $0 \"Spring AI\""
   echo "         $0 \"Spring Boot 4\" engineering"
+  echo "         $0 \"Spring AI\" engineering posts"
   exit 1
 fi
 
-OUTDIR="./spring_blogs_$(echo "$KEYWORD" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g' | sed 's/--*/-/g' | sed 's/^-//;s/-$//')"
+if [ -z "$OUTDIR" ]; then
+  OUTDIR="./spring_blogs_$(echo "$KEYWORD" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g' | sed 's/--*/-/g' | sed 's/^-//;s/-$//')"
+fi
 FILTER="${SKILL_DIR}/clean_springblog.lua"
 PAGE_DATA_URL="https://spring.io/page-data/blog/category/${CATEGORY}/page-data.json"
 
@@ -53,20 +57,20 @@ curl -sL "$PAGE_DATA_URL" \
       "| # | Date | Title | Author |",
       "| --- | --- | --- | --- |",
       ([.result.data.posts.nodes[] |
-        select(.frontmatter.title | test($kw; "i"))] |
+        select((.frontmatter.title | test($kw; "i")) and (.fields.path | test("a-bootiful-podcast|spring-tips|spring-office-hours-podcast"; "i") | not))] |
         sort_by(.frontmatter.publishedAt) | reverse |
         to_entries |
         .[] |
         "| \(.key + 1) | \(.value.frontmatter.publishedAt) | [\(.value.frontmatter.title)](https://spring.io/blog/\(.value.fields.path)) | \(.value.frontmatter.author) |"),
       "",
-      "_Total: \( [.result.data.posts.nodes[] | select(.frontmatter.title | test($kw; "i"))] | length ) articles_"
+      "_Total: \( [.result.data.posts.nodes[] | select((.frontmatter.title | test($kw; "i")) and (.fields.path | test("a-bootiful-podcast|spring-tips|spring-office-hours-podcast"; "i") | not))] | length ) articles_"
     ' > "${OUTDIR}/blog_source_url.md"
 
 # Extract paths for batch download
 curl -sL "$PAGE_DATA_URL" \
   | jq -r --arg kw "$KEYWORD" \
       '[.result.data.posts.nodes[] |
-        select(.frontmatter.title | test($kw; "i"))] |
+        select((.frontmatter.title | test($kw; "i")) and (.fields.path | test("a-bootiful-podcast|spring-tips|spring-office-hours-podcast"; "i") | not))] |
         sort_by(.frontmatter.publishedAt) | reverse |
         .[].fields.path' \
   > /tmp/spring_paths.txt
